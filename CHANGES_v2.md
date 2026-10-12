@@ -48,3 +48,11 @@ No new outputs. One new store (`vc_status`, written only by Vikram from the dash
 - 5th KPI tile, band-bar segment, Pipeline chip and proximity ring for Check out; Check out card on Overview.
 - Overview "This week's 5" = top 5 Reach-out VCs by score (ranked).
 - VC panel: four weighted parts per signal (What x0.50, Logistics x0.30, Fresh x0.15, Led x0.05) and best + 5 x extras; second logistics deal, watch-outs, seed evidence.
+
+# UI v2 (12 Oct 2026) - UI_REVAMP_PROMPT_v2.md
+- New UI: navy + light-blue palette only (alert red only for "Check for conflict"), Inter + IBM Plex Mono, lucide icons.
+- Pages: Today (verdict, band numbers that open lists, hit list with opener + Copy, skip list), Pipeline (two column groups),
+  Changes, Calendar (with notes), Signals (side-sheet log, weekly feed, rejected), Last run report (Run now, untouched proof, data gaps, runs).
+- Backend additions only: `calendar_notes` table + /api/notes routes; read-only derived page fields (where we stand, opener templates,
+  skip reasons, data gaps, per-run change tables, rate-limit time, DB-guard check). Verify hash logic moved to lib/verify.js (same output).
+- Checked: before/after JSON of /api/verify, /api/run (no auth), /api/log and /api/status (invalid input), the full vcs table and table counts: identical.

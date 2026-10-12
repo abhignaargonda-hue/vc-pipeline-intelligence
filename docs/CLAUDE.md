@@ -56,3 +56,43 @@ Vercel cron Mon + Thu 6:30am IST = "0 1 * * 1,4" (UTC).
 - Fetch window 60 days: Tavily with start_date/end_date (not `days`), still 1 basic search per VC; Tavily placeholder dates
   (<today-30> 17:00:00 GMT) are treated as undated.
 - Dashboard: 5 KPI tiles / band-bar segments incl. Check out, "This week's 5", four-part score maths in the VC panel.
+
+## UI v2 (12 Oct 2026) - UI_REVAMP_PROMPT_v2.md
+Question the UI answers: "Who do I message today, why, and who can I ignore this week?" No data, scoring, band, pipeline,
+cron, Gemini/Tavily or existing-API changes (before/after JSON compared identical).
+
+**Palette tokens** (app/globals.css): navy-900 #0B1F3A (sidebar, headings), navy-700 #163A6B (hover/active), blue-600 #1F5FAD
+(primary, Reach out), blue-400 #5B8FD6 (Warm), blue-200 #A9C6EC (Low), blue-100 #E3EFFB (soft fills, "system" columns),
+blue-50 #F2F7FC (page bg), white #FFFFFF (cards), border #D6E4F2, ink #0F2740, muted #5B6F86, grey-300 #C5CFDB (No news / Skip),
+alert #B4363A (ONLY the "Check for conflict" chip). Check out = white with dashed blue-600 outline. Up = blue-600, down = muted.
+Inter for text, IBM Plex Mono (tabular) for scores, dates and rupees. 8px grid, 12px radius, one shadow, 1px borders.
+
+**Pages** (navy sidebar, collapses to icons; bottom tab bar at <= 768px; keys: / search, g t|p|c|a|s|r):
+1. Today: verdict (Heavy >= 5 Reach out, Light 1-4, Quiet 0), band number row (click opens that band's VCs), hit list
+   (Reach out + top Warm, max 7; What happened / Proof / Where we stand / What to do + opener with Copy), "Quiet: skip this week".
+2. Pipeline: one table mirroring `vcs`, two column groups: "Your columns (read-only)" and "Updated by the system (only these 4)";
+   sortable, sticky header, band / conflict chips, search, compact toggle; drawer tabs Signals / Score / Partner & thesis / Warm path.
+3. Changes: snapshot run selector (run_scores), old -> new score and band, reason + link.
+4. Calendar: Monday-first grid; markers: run day dot, signal diamond, India event blue tag (abroad = outlined), note dot;
+   right panel tabs Day / My notes (autosave, edit, delete with confirm, All notes list). "Visible to anyone with this link."
+5. Signals: "+ Log a signal" side sheet (30-day check inline), feed grouped by week, details behind an "i" tooltip, collapsible Rejected.
+6. Last run report: Next run, Run now (30-min limit with countdown), last run; VCs scanned / items / signals / cost / credits;
+   "Your data untouched" (DB guard active + verify fingerprint); Data gaps (no item at all in 60 days); Runs & cost table.
+   Run now / Next run appear ONLY here (+ one "Next run" line in the sidebar footer).
+
+**Notes table**: `calendar_notes(id bigserial pk, note_date date not null, body text not null check (char_length(body) <= 2000),
+created_at, updated_at)`; not linked to vcs. API: GET /api/notes?month=YYYY-MM, POST /api/notes, PATCH /api/notes/:id,
+DELETE /api/notes/:id (validated).
+
+**Opener templates** (app/page.js `opener()`, no AI call; filled only from stored fields; a missing field drops its clause;
+{company} = first word of the event_key as spelled in the stored summary; {pitch} = "We're building a B2B logistics SaaS in India
+and are raising our seed round" from seed/company-profile.md section 1):
+- New investment (S1): "Hi {first}, saw {firm} backed {company} on {date}. {pitch}, and would value 20 minutes."
+- New fund (S5): "Hi {first}, congratulations on {firm}'s new fund ({date}). {pitch}, and would value 20 minutes as you start deploying."
+- Blog post (S2): "Hi {first}, read {firm}'s recent post ({date}): {summary}. {pitch}; would value your view."
+- Interview (S3): "Hi {first}, came across your recent interview ({date}): {summary}. {pitch}; would value 20 minutes."
+- Event (S4a/S4b): upcoming: "Hi {first}, saw you'll be at {event} in {city}. {pitch}; would love to say hello there."
+  past: "Hi {first}, saw your session at {event} on {date}. {pitch}, and would value 20 minutes."
+- Applications open (S6): "Hi {first}, saw {firm}'s applications are open on {date}. {pitch}; we'd like to apply and would value a quick chat."
+- Follow-on (S7): "Hi {first}, saw {firm} doubled down on {company} on {date}. {pitch}, and would value 20 minutes."
+No partner -> "Hi {firm} team,". The status editor in the VC drawer still writes only the separate vc_status log.

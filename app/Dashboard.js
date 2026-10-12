@@ -1,363 +1,332 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Sun, Table2, ArrowUpDown, CalendarDays, Radio, ClipboardList, Lock, Sparkles, Search, X, Copy, Check, ExternalLink,
+  ChevronDown, ChevronRight, ChevronLeft, Plus, Info, ShieldCheck, AlertTriangle, PanelLeftClose, PanelLeftOpen, Play, Clock,
+  Trash2, ArrowUp, ArrowDown, Rows3, Rows4,
+} from 'lucide-react';
 
+/* ---------------- constants & helpers ---------------- */
 const BANDS = {
-  reach: { label: 'Reach out this week', short: 'Reach out', color: 'var(--reach)', soft: 'var(--reach-soft)' },
-  warm: { label: 'Warm: mention the signal', short: 'Warm', color: 'var(--warm)', soft: 'var(--warm-soft)' },
-  low: { label: 'Low priority', short: 'Low', color: 'var(--low)', soft: 'var(--low-soft)' },
-  checkout: { label: 'Check out (older news, not scored)', short: 'Check out', color: 'var(--checkout)', soft: 'var(--checkout-soft)' },
-  unknown: { label: 'No news found (unknown)', short: 'Unknown', color: 'var(--unknown)', soft: 'var(--unknown-soft)' },
+  reach: { label: 'Reach out', long: 'Reach out this week' },
+  warm: { label: 'Warm', long: 'Warm: mention the signal' },
+  low: { label: 'Low', long: 'Low priority' },
+  checkout: { label: 'Check out', long: 'Check out (older news)' },
+  unknown: { label: 'No news', long: 'No news found (unknown)' },
 };
 const ORDER = ['reach', 'warm', 'low', 'checkout', 'unknown'];
 const parked = v => ['Passed', 'Not now'].includes(v.my_status);
-const GROUP_RANK = { logistics_active: 0, b2b_generalist: 1, poor_fit: 2 };
-const WHO_CLASS = { 'my partner': 'p-reach', 'someone else at the firm': 'p-warm' };
-const TYPE_NAMES = { S1: 'Invested', S2: 'Wrote', S3: 'Podcast / interview', S4a: 'Spoke (logistics event)', S4b: 'Spoke (startup event)', S5: 'New fund', S6: 'Applications open', S7: 'Portfolio follow-on / exit', N1: 'Category peer', N2: 'Partner change' };
+const NAV = [
+  { key: 'today', label: 'Today', icon: Sun, sub: 'Who to message today, why, and who to skip this week', key2: 't' },
+  { key: 'pipeline', label: 'Pipeline', icon: Table2, sub: 'All 50 VCs, mirroring the Neon pipeline table', key2: 'p' },
+  { key: 'changes', label: 'Changes', icon: ArrowUpDown, sub: 'What moved since the previous run', key2: 'c' },
+  { key: 'calendar', label: 'Calendar', icon: CalendarDays, sub: 'Signals, events, runs and your notes by day', key2: 'a' },
+  { key: 'signals', label: 'Signals', icon: Radio, sub: 'Every accepted signal, newest first', key2: 's' },
+  { key: 'report', label: 'Last run report', icon: ClipboardList, sub: 'Run now, cost, coverage and proof your data is untouched', key2: 'r' },
+];
 
 const d10 = d => String(d || '').slice(0, 10);
 const fmt = (d, opt = { day: 'numeric', month: 'short' }) => (d ? new Date(d10(d) + 'T00:00:00Z').toLocaleDateString('en-GB', { ...opt, timeZone: 'UTC' }) : '');
 const fmtDT = d => (d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '-');
 const istDay = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const addDays = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+const weekStart = iso => { const d = new Date(d10(iso) + 'T00:00:00Z'); return addDays(d10(iso), -((d.getUTCDay() + 6) % 7)); };
+const isIndia = e => !e.event_country || /india/i.test(e.event_country);
 
-const Icon = ({ d, size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {d.map((p, i) => <path key={i} d={p} />)}
-  </svg>
-);
-const I = {
-  overview: ['M3 3h7v9H3z', 'M14 3h7v5h-7z', 'M14 12h7v9h-7z', 'M3 16h7v5H3z'],
-  pipeline: ['M3 6h18', 'M3 12h18', 'M3 18h18', 'M7 6v0', 'M7 12v0'],
-  calendar: ['M3 5h18v16H3z', 'M16 3v4', 'M8 3v4', 'M3 10h18'],
-  signals: ['M2 12h4l3-8 4 16 3-8h6'],
-  runs: ['M12 2v4', 'M12 18v4', 'M4.9 4.9l2.8 2.8', 'M16.3 16.3l2.8 2.8', 'M2 12h4', 'M18 12h4', 'M4.9 19.1l2.8-2.8', 'M16.3 7.7l2.8-2.8'],
-  shield: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M9 12l2 2 4-4'],
-  play: ['M6 4l14 8-14 8z'],
-  clock: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 6v6l4 2'],
-  ext: ['M15 3h6v6', 'M10 14L21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
-  x: ['M18 6L6 18', 'M6 6l12 12'],
-  search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', 'M21 21l-4.3-4.3'],
-  pin: ['M12 22s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z', 'M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
-  left: ['M15 18l-6-6 6-6'],
-  right: ['M9 18l6-6-6-6'],
-};
+function BandChip({ band, small }) {
+  return <span className={`band band-${band} ${small ? 'sm' : ''}`}>{BANDS[band]?.label || band}</span>;
+}
+function Score({ v }) { return <span className="score mono">{v.score}</span>; }
+function SourceLink({ url }) {
+  if (!url || !/^https?:/.test(url)) return <span className="muted small">No source link: do not rely on this</span>;
+  return <a className="src" href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{host(url)} <ExternalLink size={12} aria-hidden /></a>;
+}
+function Clamp({ text, lines = 2, className = '' }) {
+  return <span className={`clamp clamp-${lines} ${className}`} title={text || ''}>{text}</span>;
+}
 
-const NAV = [
-  { key: 'overview', label: 'Overview', icon: I.overview },
-  { key: 'pipeline', label: 'Pipeline', icon: I.pipeline },
-  { key: 'calendar', label: 'Calendar', icon: I.calendar },
-  { key: 'signals', label: 'Signals', icon: I.signals },
-  { key: 'runs', label: 'Runs & cost', icon: I.runs },
-];
-
+/* ---------------- shell ---------------- */
 export default function Dashboard({ data, initialTab }) {
-  const [tab, setTab] = useState(NAV.some(n => n.key === initialTab) ? initialTab : 'overview');
-  const [band, setBand] = useState('all');
+  const [tab, setTab] = useState(initialTab);
+  const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [pipeBand, setPipeBand] = useState('all');
+  const [toasts, setToasts] = useState([]);
+  const [notes, setNotes] = useState(data.notes);
+  const searchRef = useRef(null);
   const byId = useMemo(() => Object.fromEntries(data.vcs.map(v => [v.vc_id, v])), [data.vcs]);
-  const counts = useMemo(() => Object.fromEntries(ORDER.map(b => [b, data.vcs.filter(v => v.band === b).length])), [data.vcs]);
 
-  const go = (t, b) => { setTab(t); if (b) setBand(b); window.history.replaceState(null, '', t === 'overview' ? '/' : `/?tab=${t}`); };
+  const toast = useCallback((text, kind = 'ok') => {
+    const id = Math.random();
+    setToasts(t => [...t, { id, text, kind }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
+  }, []);
+  const go = useCallback((t, opts = {}) => {
+    setTab(t); if (opts.band) setPipeBand(opts.band);
+    window.history.replaceState(null, '', t === 'today' ? '/' : `/?tab=${t}`);
+    window.scrollTo(0, 0);
+  }, []);
   const open = id => setSelected(byId[id] || null);
 
+  useEffect(() => { try { setCollapsed(localStorage.getItem('sidebar') === 'c'); } catch {} }, []);
+  const toggleSidebar = () => setCollapsed(c => { try { localStorage.setItem('sidebar', c ? 'o' : 'c'); } catch {} return !c; });
+
+  // Keyboard: "/" search, "g" + t/p/c/a/s/r to switch pages, Esc closes panels
+  useEffect(() => {
+    let g = false, timer;
+    const onKey = e => {
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+      if (e.key === 'Escape') { setSelected(null); return; }
+      if (typing) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        if (tab !== 'pipeline') go('pipeline');
+        setTimeout(() => searchRef.current?.focus(), 50); return;
+      }
+      if (g) { const n = NAV.find(x => x.key2 === e.key); if (n) go(n.key); g = false; return; }
+      if (e.key === 'g') { g = true; clearTimeout(timer); timer = setTimeout(() => { g = false; }, 900); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tab, go]);
+
+  const page = NAV.find(n => n.key === tab);
+  const next = data.nextRun ? new Date(data.nextRun).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '-';
+
   return (
-    <div className="shell">
-      <aside className="side">
-        <div className="brand"><span className="logo">V</span><div><b>VC Pipeline</b><small>Vikram · Seed · B2B logistics</small></div></div>
+    <div className={`shell ${collapsed ? 'collapsed' : ''}`}>
+      <a href="#main" className="skip">Skip to content</a>
+      <aside className="side" aria-label="Main navigation">
+        <div className="brand">
+          <span className="logo" aria-hidden>V</span>
+          <div className="brand-text"><b>VC Pipeline</b><small>Vikram · Seed · B2B logistics</small></div>
+          <button className="icon-btn on-navy collapse-btn" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        </div>
         <nav>
-          {NAV.map(n => (
-            <button key={n.key} className={`nav ${tab === n.key ? 'on' : ''}`} onClick={() => go(n.key)}>
-              <Icon d={n.icon} /><span>{n.label}</span>
-              {n.key === 'pipeline' && <em>{data.vcs.length}</em>}
-            </button>
-          ))}
+          {NAV.map(n => {
+            const I = n.icon;
+            return (
+              <button key={n.key} className={`nav ${tab === n.key ? 'on' : ''}`} onClick={() => go(n.key)} title={`${n.label} (g ${n.key2})`} aria-current={tab === n.key ? 'page' : undefined}>
+                <I size={18} aria-hidden /><span>{n.label}</span>
+              </button>
+            );
+          })}
         </nav>
         <div className="side-foot">
-          <a className="nav" href="/api/verify" target="_blank"><Icon d={I.shield} /><span>Verify notes untouched</span></a>
-          <p>Public dashboard · no login. Code writes only 4 columns; Vikram's status and notes are read-only.</p>
+          <div className="nextline"><Clock size={14} aria-hidden /><span>Next run: <b className="mono">{next}</b></span></div>
+          <p>Public link · no login · press <kbd>/</kbd> to search</p>
         </div>
       </aside>
 
-      <div className="main">
-        <header className="topbar">
-          <div>
-            <h1>{NAV.find(n => n.key === tab).label}</h1>
-            <p className="muted small">Signals from the last 30 days · today {fmt(data.today, { day: 'numeric', month: 'short', year: 'numeric' })} (IST)
-              {data.lastRun && <> · last run #{data.lastRun.id} ({data.lastRun.trigger}) {fmtDT(data.lastRun.finished_at)}</>}</p>
-          </div>
-          <div className="top-actions">
-            <div className="next"><Icon d={I.clock} size={16} /><div><small>Next run</small><b>{data.nextRun ? new Date(data.nextRun).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '-'}</b></div></div>
-            <RunNow />
-          </div>
+      <div className="main" id="main">
+        <header className="pagehead">
+          <h1>{page.label}</h1>
+          <p className="muted">{page.sub}</p>
         </header>
-
         <div className="content">
-          {tab === 'overview' && <Overview data={data} counts={counts} go={go} open={open} />}
-          {tab === 'pipeline' && <Pipeline vcs={data.vcs} band={band} setBand={setBand} counts={counts} open={open} />}
-          {tab === 'calendar' && <Calendar data={data} open={open} />}
-          {tab === 'signals' && <Signals data={data} open={open} />}
-          {tab === 'runs' && <Runs runs={data.runs} />}
+          {tab === 'today' && <Today data={data} open={open} go={go} toast={toast} />}
+          {tab === 'pipeline' && <Pipeline data={data} band={pipeBand} setBand={setPipeBand} open={open} searchRef={searchRef} />}
+          {tab === 'changes' && <Changes data={data} open={open} />}
+          {tab === 'calendar' && <Calendar data={data} open={open} go={go} notes={notes} setNotes={setNotes} toast={toast} />}
+          {tab === 'signals' && <Signals data={data} open={open} toast={toast} />}
+          {tab === 'report' && <Report data={data} open={open} toast={toast} />}
         </div>
       </div>
 
-      {selected && <Detail vc={selected} statuses={data.statuses} onClose={() => setSelected(null)} />}
+      {selected && <Drawer vc={selected} statuses={data.statuses} onClose={() => setSelected(null)} toast={toast} />}
+      <div className="toasts" role="status" aria-live="polite">
+        {toasts.map(t => <div key={t.id} className={`toast ${t.kind}`}>{t.kind === 'err' ? <AlertTriangle size={16} /> : <Check size={16} />}{t.text}</div>)}
+      </div>
     </div>
   );
 }
 
-/* ---------------- Run now ---------------- */
-function RunNow() {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  async function go() {
-    setBusy(true); setMsg('Fetching feeds + 50 Tavily searches, labelling with Gemini...');
-    try {
-      const r = await fetch('/api/run', { method: 'POST' });
-      const j = await r.json();
-      if (!r.ok) setMsg(j.error || 'Failed');
-      else { setMsg(`Done: ${j.fetched} fetched, ${j.new} new, ${j.counted} counted.`); setTimeout(() => location.reload(), 1200); }
-    } catch (e) { setMsg(e.message); }
-    setBusy(false);
-  }
+/* ---------------- Today ---------------- */
+function CopyButton({ text, toast, label = 'Copy' }) {
+  const [done, setDone] = useState(false);
   return (
-    <div className="runnow">
-      <button className="btn primary" onClick={go} disabled={busy}><Icon d={I.play} size={14} />{busy ? 'Running...' : 'Run now'}</button>
-      <small className="muted">{msg || 'Max once per 30 min'}</small>
-    </div>
+    <button className="btn ghost sm" onClick={async e => {
+      e.stopPropagation();
+      try { await navigator.clipboard.writeText(text); setDone(true); toast('Opener copied'); setTimeout(() => setDone(false), 1500); }
+      catch { toast('Could not copy', 'err'); }
+    }}>{done ? <Check size={14} /> : <Copy size={14} />}{done ? 'Copied' : label}</button>
   );
 }
 
-/* ---------------- Overview ---------------- */
-function Overview({ data, counts, go, open }) {
-  const total = data.vcs.length;
+function Today({ data, open, go, toast }) {
+  const [openBand, setOpenBand] = useState(null);
+  const [skipOpen, setSkipOpen] = useState(false);
   const active = data.vcs.filter(v => !parked(v));
   const reach = active.filter(v => v.band === 'reach').sort((a, b) => b.score - a.score);
-  const top5 = reach.slice(0, 5);
-  const checkouts = active.filter(v => v.band === 'checkout');
-  const warm = active.filter(v => v.band === 'warm');
-  const meet = data.vcs.flatMap(v => v.meet.map(m => ({ ...m, firm: v.firm, vc_id: v.vc_id })));
-  const changes = data.changes || [];
-  return (
-    <>
-      <div className="kpis">
-        {ORDER.map(b => (
-          <button key={b} className={`kpi k-${b}`} onClick={() => go('pipeline', b)}>
-            <span className="dot" />
-            <small>{BANDS[b].label}</small>
-            <b>{counts[b]}</b>
-            <span className="muted small">of {total} VCs · view →</span>
-          </button>
-        ))}
-      </div>
+  const warm = active.filter(v => v.band === 'warm').sort((a, b) => b.score - a.score);
+  const hit = [...reach, ...warm].slice(0, 7);
+  const rest = reach.length + warm.length - hit.length;
+  const skip = data.vcs.filter(v => v.skip);
+  const counts = Object.fromEntries(ORDER.map(b => [b, data.vcs.filter(v => v.band === b).length]));
+  const n = reach.length;
+  const verdict = n >= 5 ? ['Heavy outreach day', `${n} VCs to message`] : n >= 1 ? ['Light day', `${n} VC${n === 1 ? '' : 's'} to message`] : ['Quiet day', 'nobody crossed 60'];
 
-      <div className="card">
-        <div className="card-h"><h3>Band split</h3><span className="muted small">Rubric v4 · click a segment to filter</span></div>
-        <div className="splitbar">
-          {ORDER.filter(b => counts[b]).map(b => (
-            <button key={b} style={{ flex: counts[b], background: BANDS[b].color }} title={`${BANDS[b].label}: ${counts[b]}`} onClick={() => go('pipeline', b)}>
-              {counts[b] >= 2 ? counts[b] : ''}
+  return (
+    <div className="stack-lg">
+      <section className="verdict" aria-label="Today's verdict">
+        <b>{verdict[0]}:</b> {verdict[1]}
+        {data.lastRun && <span className="muted small"> · from run #{data.lastRun.id}, {fmtDT(data.lastRun.finished_at)}</span>}
+      </section>
+
+      <section aria-label="VCs by band">
+        <div className="bandrow">
+          {ORDER.map(b => (
+            <button key={b} className={`bandnum bn-${b} ${openBand === b ? 'on' : ''}`} aria-expanded={openBand === b} onClick={() => setOpenBand(openBand === b ? null : b)}>
+              <span className="mono num">{counts[b]}</span><span className="lbl">{BANDS[b].long}</span>
+              <ChevronDown size={14} className="chev" aria-hidden />
             </button>
           ))}
         </div>
-        <div className="legend">{ORDER.map(b => <span key={b}><i style={{ background: BANDS[b].color }} />{BANDS[b].short} ({counts[b]})</span>)}</div>
-      </div>
+        {openBand && <BandList band={openBand} vcs={data.vcs.filter(v => v.band === openBand)} open={open} />}
+      </section>
 
-      <div className="grid2">
-        <div className="card">
-          <div className="card-h"><h3>What changed since last run</h3>
-            <span className="muted small">{data.changesRun ? `snapshot #${data.changesRun.id} (${data.changesRun.trigger}) vs the one before` : ''}</span></div>
-          {changes.length === 0 ? <p className="muted">No score or action changed.</p> : (
-            <ul className="changes">{changes.map(c => {
-              const b = c.to_score >= 50 ? 'reach' : c.to_score >= 25 ? 'warm' : c.to_score >= 1 ? 'low' : 'unknown';
-              return (
-                <li key={c.vc_id} onClick={() => open(c.vc_id)}>
-                  <span className={`delta ${c.to_score >= c.from_score ? 'up' : 'down'}`}>{c.to_score > c.from_score ? '▲' : c.to_score < c.from_score ? '▼' : '•'}</span>
-                  <b>{c.firm}</b>
-                  <span className="mono">{c.from_score} → <span style={{ color: BANDS[b].color }}>{c.to_score}</span></span>
-                  <span className="muted small ellipsis">{c.summary}</span>
-                </li>
-              );
-            })}</ul>
-          )}
-        </div>
-        <div className="card amber">
-          <div className="card-h"><h3><Icon d={I.pin} size={16} /> Meet in person</h3><span className="small">upcoming events with a tracked VC</span></div>
-          {meet.length === 0 ? <p className="muted">No upcoming events found.</p> : meet.map((m, i) => (
-            <div key={i} className="meet" onClick={() => open(m.vc_id)}>
-              <div className="meet-date"><b>{fmt(m.event_start, { day: 'numeric' })}</b><small>{fmt(m.event_start, { month: 'short' })}</small></div>
-              <div><b>{m.event_name || 'Event'}</b>{m.event_city && <span className="small"> · {m.event_city}{m.event_country ? `, ${m.event_country}` : ''}</span>}
-                <div className="small">{m.firm} · {fmt(m.event_start)}{m.event_end && m.event_end !== m.event_start ? ` – ${fmt(m.event_end)}` : ''}</div>
-                <a className="small" href={m.url} target="_blank" onClick={e => e.stopPropagation()}>source ↗</a></div>
+      <section aria-label="This week's hit list">
+        <div className="sec-h"><h2>This week&apos;s hit list</h2>
+          <span className="muted small">{reach.length} reach out + top warm, by score{rest > 0 && <> · <button className="linkbtn" onClick={() => go('pipeline')}>See all {rest + hit.length} in Pipeline →</button></>}</span></div>
+        {hit.length === 0 ? <p className="empty">No VC has a scoring signal this run. Nothing to send today; check the Check out list or log what you have seen yourself.</p> : (
+          <div className="hitlist">{hit.map((v, i) => <HitCard key={v.vc_id} v={v} rank={i + 1} open={open} toast={toast} />)}</div>
+        )}
+      </section>
+
+      <section aria-label="Skip this week" className="card">
+        <button className="collapse-h" aria-expanded={skipOpen} onClick={() => setSkipOpen(!skipOpen)}>
+          {skipOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<h2>Quiet: skip this week</h2><span className="pill-count mono">{skip.length} to skip this week</span>
+        </button>
+        {skipOpen && (
+          <ul className="skiplist">{skip.map(v => (
+            <li key={v.vc_id} onClick={() => open(v.vc_id)}><b>{v.firm}</b><BandChip band={v.band} small /><Clamp text={v.skip} lines={1} className="muted small" /></li>
+          ))}</ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function BandList({ band, vcs, open }) {
+  const list = [...vcs].sort((a, b) => b.score - a.score || a.firm.localeCompare(b.firm));
+  return (
+    <div className="bandlist card">
+      {list.length === 0 && <p className="muted">None in this band.</p>}
+      {list.map(v => {
+        const best = v.items.find(i => i.best);
+        return (
+          <div key={v.vc_id} className="bl-row" onClick={() => open(v.vc_id)}>
+            <div className="bl-name"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'no tracked partner'}</span></div>
+            {band !== 'checkout' && band !== 'unknown' ? <span className="score mono">{v.score}</span> : <span />}
+            <div className="bl-line">
+              {band === 'unknown' ? <span className="muted small">Nothing found in tracked sources (30 days)</span>
+                : band === 'checkout' && v.checkout ? <><Clamp text={v.checkout.summary} lines={1} className="small" /><span className="mono small muted">{fmt(v.checkout.published_at)}</span><SourceLink url={v.checkout.url} /></>
+                : best ? <><Clamp text={best.summary} lines={1} className="small" /><SourceLink url={best.url} /></> : <span className="muted small">{v.recommended_action}</span>}
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid2">
-        <div className="stack">
-          <div className="card">
-            <div className="card-h"><h3><span className="pill p-reach">Ready to talk</span> This week's 5</h3><span className="muted small">top Reach-out VCs by score{reach.length > 5 ? ` · ${reach.length - 5} more in Pipeline` : ''}</span></div>
-            {top5.length > 0 ? top5.map((v, i) => <VcCard key={v.vc_id} v={v} open={open} rank={i + 1} />) : (
-              <>
-                <p className="emptyline">No VC crossed 50 this run. These are the strongest warm leads.</p>
-                {warm.slice(0, 3).map(v => <VcCard key={v.vc_id} v={v} open={open} />)}
-              </>
-            )}
           </div>
-          {checkouts.length > 0 && <div className="card">
-            <div className="card-h"><h3><span className="pill p-checkout">Check out</span> Older news (31-60 days), not scored</h3><span className="muted small">{checkouts.length}</span></div>
-            {checkouts.slice(0, 6).map(v => <CheckoutLine key={v.vc_id} v={v} open={open} />)}
-            {checkouts.length > 6 && <p className="small muted">+{checkouts.length - 6} more in Pipeline → Check out</p>}
-          </div>}
-          <div className="card">
-            <div className="card-h"><h3><span className="pill p-warm">Warm</span> Mention the signal if you contact them</h3><span className="muted small">{warm.length}</span></div>
-            {warm.length === 0 ? <p className="muted">None.</p> : warm.slice(reach.length ? 0 : 3).map(v => <VcCard key={v.vc_id} v={v} open={open} compact />)}
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-h"><h3>Proximity rings</h3><span className="muted small">closer to centre = more worth contacting now</span></div>
-          <Rings vcs={data.vcs} open={open} />
-        </div>
-      </div>
-    </>
-  );
-}
-
-function WhoTag({ item }) {
-  if (!item) return null;
-  return <span className={`pill ${WHO_CLASS[item.who] || 'p-unknown'}`} title={item.person || ''}>{item.who === 'my partner' ? `your partner${item.person ? `: ${item.person}` : ''}` : item.who === 'someone else at the firm' ? `someone else: ${item.person}` : 'firm-level'}</span>;
-}
-
-function CheckoutLine({ v, open }) {
-  const c = v.checkout;
-  return (
-    <div className="vccard b-checkout" onClick={() => open(v.vc_id)}>
-      <div className="vccard-body">
-        <div className="row"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'no tracked partner'}</span></div>
-        {c && <div className="small">{c.summary} <span className="muted">· {fmt(c.published_at)} · </span><a href={c.url} target="_blank" onClick={e => e.stopPropagation()}>{host(c.url)} ↗</a></div>}
-      </div>
+        );
+      })}
     </div>
   );
 }
 
-function VcCard({ v, open, compact, rank }) {
-  const best = v.items.find(i => i.points > 0);
+function HitCard({ v, rank, open, toast }) {
+  const best = v.items.find(i => i.best);
   return (
-    <div className={`vccard b-${v.band}`} onClick={() => open(v.vc_id)}>
-      {rank && <span className="rank">{rank}</span>}
-      <ScoreRing score={v.score} band={v.band} size={compact ? 40 : 52} />
-      <div className="vccard-body">
-        <div className="row"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'no tracked partner'}</span>
-          {v.my_status && <span className="pill p-low">{v.my_status}</span>}
-          {v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</div>
-        {best && <div className="small">{best.summary}</div>}
-        {best && <div className="small muted row" style={{ gap: 4 }}><span className="tag">{best.type}</span>{best.stage !== 'unknown' && <span className="tag t-rel">{best.stage}</span>}<WhoTag item={best} />{fmt(best.published_at)}{best.copies > 1 ? ` · ${best.copies} reports` : ''}</div>}
-        {!compact && v.logistics_evidence && <div className="small muted">Logistics deal on record: {v.logistics_evidence}</div>}
-      </div>
-    </div>
-  );
-}
-
-function ScoreRing({ score, band, size = 48 }) {
-  const r = size / 2 - 4, c = 2 * Math.PI * r;
-  return (
-    <svg width={size} height={size} className="scorering" aria-label={`score ${score}`}>
-      <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--line)" strokeWidth="4" fill="none" />
-      <circle cx={size / 2} cy={size / 2} r={r} stroke={BANDS[band].color} strokeWidth="4" fill="none" strokeLinecap="round"
-        strokeDasharray={`${(c * Math.min(100, score)) / 100} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fontSize={size / 3.2} fontWeight="700" fill="var(--fg)">{score}</text>
-    </svg>
-  );
-}
-
-function Rings({ vcs, open }) {
-  const [hover, setHover] = useState(null);
-  const S = 420, C = S / 2;
-  const zones = { reach: [26, 62], warm: [72, 104], low: [114, 140], checkout: [150, 174], unknown: [184, 204] };
-  const dots = [];
-  ORDER.forEach(b => {
-    const list = vcs.filter(v => v.band === b);
-    list.forEach((v, i) => {
-      const [r0, r1] = zones[b];
-      const frac = b === 'unknown' || b === 'checkout' ? 0.5 : b === 'reach' ? 1 - (v.score - 60) / 40 : b === 'warm' ? 1 - (v.score - 25) / 35 : 1 - (v.score - 1) / 24;
-      const r = r0 + (r1 - r0) * Math.max(0, Math.min(1, frac));
-      const a = (i / Math.max(1, list.length)) * 2 * Math.PI + (b === 'unknown' ? 0.2 : b === 'checkout' ? 1.4 : b === 'low' ? 0.9 : b === 'warm' ? 0.4 : -1.2);
-      dots.push({ v, x: C + r * Math.cos(a), y: C + r * Math.sin(a), b });
-    });
-  });
-  return (
-    <div className="rings">
-      <svg viewBox={`0 0 ${S} ${S}`} role="img" aria-label="VC proximity rings">
-        {[...ORDER].reverse().map(b => <circle key={b} cx={C} cy={C} r={zones[b][1] + 8} fill={BANDS[b].soft} stroke="var(--line)" />)}
-        <circle cx={C} cy={C} r="16" fill="var(--accent)" />
-        <text x={C} y={C} dominantBaseline="central" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">You</text>
-        {ORDER.map(b => <text key={b} x={C} y={C - zones[b][1] - 1} textAnchor="middle" fontSize="10" fill="var(--muted)">{BANDS[b].short}</text>)}
-        {dots.map(({ v, x, y, b }) => (
-          <g key={v.vc_id} className="ringdot" onClick={() => open(v.vc_id)} onMouseEnter={() => setHover({ v, x, y })} onMouseLeave={() => setHover(null)}>
-            <circle cx={x} cy={y} r="13" fill="transparent" />
-            <circle cx={x} cy={y} r={b === 'unknown' || b === 'checkout' ? 4.5 : 7} fill={BANDS[b].color} stroke={parked(v) ? 'var(--fg)' : '#fff'} strokeWidth="1.5" />
-            {(b === 'reach' || b === 'warm') && <text x={x} y={y - 11} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--fg)">{v.firm.split(' ')[0]}</text>}
-          </g>
-        ))}
-      </svg>
-      {hover && (
-        <div className="ringtip" style={{ left: `${(hover.x / S) * 100}%`, top: `${(hover.y / S) * 100}%` }}>
-          <b>{hover.v.firm}</b> · {hover.v.score}<br /><span className="small">{BANDS[hover.v.band].label}{hover.v.my_status ? ` · ${hover.v.my_status}` : ''}</span>
-        </div>
-      )}
-    </div>
+    <article className="hit card" onClick={() => open(v.vc_id)}>
+      <header className="hit-h">
+        <span className="rank mono">{rank}</span>
+        <div className="hit-title"><b>{v.firm}</b><span className="muted small">{v.partner_name ? `${v.partner_name}${v.partner_title ? `, ${v.partner_title}` : ''}` : 'no tracked partner'}</span></div>
+        {v.flags.includes('Check for conflict') && <span className="chip-alert">Check for conflict</span>}
+        <BandChip band={v.band} /><Score v={v} />
+      </header>
+      <dl className="hit-rows">
+        <dt>What happened</dt><dd>{v.what_line || '-'}</dd>
+        <dt>Proof</dt><dd className="proof"><Clamp text={best?.summary} lines={2} />{best && <SourceLink url={best.url} />}</dd>
+        <dt>Where we stand</dt><dd>{v.stand}</dd>
+        <dt>What to do</dt>
+        <dd>
+          <Clamp text={v.recommended_action} lines={2} />
+          {v.opener && <div className="opener" onClick={e => e.stopPropagation()}><Clamp text={v.opener} lines={2} className="small" /><CopyButton text={v.opener} toast={toast} /></div>}
+        </dd>
+      </dl>
+    </article>
   );
 }
 
 /* ---------------- Pipeline ---------------- */
-function Pipeline({ vcs, band, setBand, counts, open }) {
+const COLS = [
+  { k: 'firm', label: 'Firm', group: 'mine', get: v => v.firm },
+  { k: 'partner', label: 'Partner', group: 'mine', get: v => v.partner_name || '' },
+  { k: 'thesis', label: 'Thesis', group: 'mine', get: v => v.thesis_quote || '' },
+  { k: 'status', label: 'Status', group: 'mine', get: v => v.status || '' },
+  { k: 'contact', label: 'Last contact', group: 'mine', get: v => v.last_contact_date || '' },
+  { k: 'notes', label: 'My notes', group: 'mine', get: v => v.personal_notes || '' },
+  { k: 'lsd', label: 'Last signal date', group: 'sys', get: v => v.last_signal_date || '' },
+  { k: 'summary', label: 'Signal summary', group: 'sys', get: v => v.signal_summary || '' },
+  { k: 'score', label: 'Follow-up score', group: 'sys', get: v => v.score },
+  { k: 'action', label: 'Recommended action', group: 'sys', get: v => v.recommended_action || '' },
+];
+
+function Pipeline({ data, band, setBand, open, searchRef }) {
   const [q, setQ] = useState('');
-  const [group, setGroup] = useState('all');
-  const [conflict, setConflict] = useState(false);
-  const list = vcs.filter(v =>
-    (band === 'all' || v.band === band) && (group === 'all' || v.vc_group === group) && (!conflict || v.flags.length) &&
-    (!q || `${v.firm} ${v.partner_name || ''} ${v.signal_summary || ''} ${v.my_status || ''}`.toLowerCase().includes(q.toLowerCase())))
-    .sort((a, b) => b.score - a.score || (GROUP_RANK[a.vc_group] ?? 3) - (GROUP_RANK[b.vc_group] ?? 3) || a.firm.localeCompare(b.firm));
+  const [flagsOnly, setFlagsOnly] = useState(false);
+  const [sort, setSort] = useState({ k: 'score', dir: -1 });
+  const [dense, setDense] = useState(false);
+  const counts = Object.fromEntries(ORDER.map(b => [b, data.vcs.filter(v => v.band === b).length]));
+  const col = COLS.find(c => c.k === sort.k);
+  const list = data.vcs
+    .filter(v => (band === 'all' || v.band === band) && (!flagsOnly || v.flags.length) &&
+      (!q || `${v.firm} ${v.partner_name || ''} ${v.signal_summary || ''} ${v.recommended_action || ''}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => { const x = col.get(a), y = col.get(b); return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * sort.dir || a.firm.localeCompare(b.firm); });
+  const th = c => (
+    <th key={c.k} className={`g-${c.group}`} aria-sort={sort.k === c.k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+      <button className="sortbtn" onClick={() => setSort(s => ({ k: c.k, dir: s.k === c.k ? -s.dir : (c.k === 'score' ? -1 : 1) }))}>
+        {c.label}{sort.k === c.k && (sort.dir > 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+      </button>
+    </th>
+  );
   return (
-    <div className="card">
-      <div className="filters">
+    <div className="stack">
+      <div className="toolbar">
         <div className="chips">
-          <button className={`chip ${band === 'all' ? 'on' : ''}`} onClick={() => setBand('all')}>All <em>{vcs.length}</em></button>
-          {ORDER.map(b => (
-            <button key={b} className={`chip c-${b} ${band === b ? 'on' : ''}`} onClick={() => setBand(b)}><i />{BANDS[b].short} <em>{counts[b]}</em></button>
-          ))}
-          <button className={`chip ${conflict ? 'on' : ''}`} onClick={() => setConflict(!conflict)}>Flags <em>{vcs.filter(v => v.flags.length).length}</em></button>
+          <button className={`chip ${band === 'all' ? 'on' : ''}`} onClick={() => setBand('all')}>All <span className="mono">{data.vcs.length}</span></button>
+          {ORDER.map(b => <button key={b} className={`chip ${band === b ? 'on' : ''}`} onClick={() => setBand(b)}><i className={`dot dot-${b}`} />{BANDS[b].label} <span className="mono">{counts[b]}</span></button>)}
+          <button className={`chip ${flagsOnly ? 'on' : ''}`} onClick={() => setFlagsOnly(!flagsOnly)}>Conflict flag <span className="mono">{data.vcs.filter(v => v.flags.length).length}</span></button>
         </div>
         <div className="row">
-          <select value={group} onChange={e => setGroup(e.target.value)}>
-            <option value="all">All groups</option><option value="logistics_active">logistics_active</option>
-            <option value="b2b_generalist">b2b_generalist</option><option value="poor_fit">poor_fit</option>
-          </select>
-          <label className="search"><Icon d={I.search} size={15} /><input placeholder="Search VC, partner, signal, status" value={q} onChange={e => setQ(e.target.value)} /></label>
+          <label className="search"><Search size={15} aria-hidden /><input ref={searchRef} placeholder="Search  ( / )" value={q} onChange={e => setQ(e.target.value)} aria-label="Search VCs" /></label>
+          <button className="btn ghost sm" onClick={() => setDense(!dense)} aria-pressed={dense}>{dense ? <Rows4 size={14} /> : <Rows3 size={14} />}{dense ? 'Compact' : 'Comfortable'}</button>
         </div>
       </div>
-      {band === 'checkout' && <p className="small muted">Check out = nothing scored in the last 30 days, but a qualifying item from 31-60 days ago exists. It is shown for context and never scored or moved into another band.</p>}
-      {band === 'unknown' && <p className="small muted">Unknown = our tracked sources (news search, Google Alerts, Inc42/YourStory, 4 Substacks) found nothing in 30 days. It is not proof the fund is inactive: LinkedIn and most firm blogs are not machine-readable. Use Log a signal for what you see yourself. Sorted by fit.</p>}
-      <div className="wrap">
-        <table className="tbl">
-          <thead><tr><th>VC</th><th>Score</th><th>Band</th><th className="hide-sm">Latest signal</th><th className="hide-sm">Your status</th></tr></thead>
+      <div className="tablewrap card flush">
+        <table className={`ptable ${dense ? 'dense' : ''}`}>
+          <thead>
+            <tr className="grouprow">
+              <th colSpan={6} className="g-mine"><Lock size={13} aria-hidden /> Your columns (read-only)</th>
+              <th colSpan={4} className="g-sys"><Sparkles size={13} aria-hidden /> Updated by the system (only these 4)</th>
+            </tr>
+            <tr>{COLS.map(th)}</tr>
+          </thead>
           <tbody>
-            {list.map(v => {
-              const best = v.items.find(i => i.points > 0) || v.items[0];
-              return (
-                <tr key={v.vc_id} onClick={() => open(v.vc_id)} className={`clickrow ${parked(v) ? 'parkedrow' : ''}`}>
-                  <td><b>{v.firm}</b><div className="small muted">{v.partner_name || 'no tracked partner'} · {v.vc_group}</div></td>
-                  <td><ScoreRing score={v.score} band={v.band} size={36} /></td>
-                  <td><span className={`pill p-${v.band}`}>{BANDS[v.band].short}</span>{v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</td>
-                  <td className="hide-sm small">{best ? <>{best.summary} <span className="muted">· {fmt(best.published_at)}</span> <WhoTag item={best} /></>
-                    : v.checkout ? <><span className="pill p-checkout">older</span>{v.checkout.summary} <span className="muted">· {fmt(v.checkout.published_at)}</span> <a href={v.checkout.url} target="_blank" onClick={e => e.stopPropagation()}>↗</a></>
-                    : <span className="muted">No news found in tracked sources</span>}</td>
-                  <td className="hide-sm small">{v.my_status ? <span className="pill p-low">{v.my_status}</span> : <span className="muted">set in panel →</span>}</td>
-                </tr>
-              );
-            })}
-            {list.length === 0 && <tr><td colSpan="5" className="muted">No VCs match.</td></tr>}
+            {list.map(v => (
+              <tr key={v.vc_id} onClick={() => open(v.vc_id)} tabIndex={0} onKeyDown={e => e.key === 'Enter' && open(v.vc_id)}>
+                <td className="g-mine"><b>{v.firm}</b>{v.flags.includes('Check for conflict') && <span className="chip-alert sm">conflict</span>}</td>
+                <td className="g-mine small">{v.partner_name || <span className="muted">-</span>}</td>
+                <td className="g-mine small"><Clamp text={v.thesis_quote} lines={2} /></td>
+                <td className="g-mine small">{v.status || <span className="muted">-</span>}{v.my_status && <div className="muted">set here: {v.my_status}</div>}</td>
+                <td className="g-mine small mono">{v.last_contact_date ? fmt(v.last_contact_date) : <span className="muted">-</span>}</td>
+                <td className="g-mine small"><Clamp text={v.personal_notes || '-'} lines={2} className={v.personal_notes ? '' : 'muted'} /></td>
+                <td className="g-sys small mono">{v.last_signal_date ? fmt(v.last_signal_date) : '-'}</td>
+                <td className="g-sys small"><Clamp text={v.signal_summary || '-'} lines={2} /></td>
+                <td className="g-sys"><span className="score mono">{v.score}</span> <BandChip band={v.band} small /></td>
+                <td className="g-sys small"><Clamp text={v.recommended_action || '-'} lines={2} /></td>
+              </tr>
+            ))}
+            {list.length === 0 && <tr><td colSpan={10} className="muted">No VCs match.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -365,327 +334,437 @@ function Pipeline({ vcs, band, setBand, counts, open }) {
   );
 }
 
-function StatusEditor({ v, statuses }) {
-  const [status, setStatus] = useState(v.my_status && statuses.includes(v.my_status) ? v.my_status : '');
-  const [note, setNote] = useState('');
-  const [msg, setMsg] = useState('');
+function StatusSetter({ vc, statuses, toast }) {
+  const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
-  async function save() {
-    if (!status) return;
-    setBusy(true); setMsg('');
-    const r = await fetch('/api/status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vc_id: v.vc_id, status, note }) });
-    const j = await r.json();
+  async function save(s) {
+    setStatus(s); setBusy(true);
+    const r = await fetch('/api/status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vc_id: vc.vc_id, status: s }) });
+    const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (j.ok) { setMsg('Saved. Rescoring...'); setTimeout(() => location.reload(), 700); } else setMsg(j.message || 'Failed');
+    if (j.ok) { toast(`Status saved: ${s}`); setTimeout(() => location.reload(), 600); } else toast(j.message || 'Could not save', 'err');
   }
   return (
-    <div className="statusbox">
-      <div className="row">
-        <select value={status} onChange={e => setStatus(e.target.value)}><option value="" disabled>Set your status</option>{statuses.map(s => <option key={s}>{s}</option>)}</select>
-        <input placeholder="Optional note (e.g. 'passed: too early')" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1 }} />
-        <button className="btn primary" disabled={busy || !status} onClick={save}>Save</button>
-      </div>
-      <div className="small muted">{msg || 'Passed / Not now removes the VC from your reach-out and warm lists. Saved to a separate status log; your original columns are never overwritten.'}</div>
-      {v.status_history.length > 0 && <details><summary>History ({v.status_history.length})</summary>{v.status_history.map((h, i) => <div key={i} className="small">{fmtDT(h.at)}: <b>{h.status}</b>{h.note ? ` · ${h.note}` : ''}</div>)}</details>}
-    </div>
+    <label className="statusset small">
+      <span className="muted">My status (separate log):</span>
+      <select value={status} disabled={busy} onChange={e => save(e.target.value)}>
+        <option value="" disabled>{vc.my_status || 'Set…'}</option>
+        {statuses.map(s => <option key={s}>{s}</option>)}
+      </select>
+    </label>
   );
 }
 
-function Detail({ vc, onClose, statuses }) {
-  useEffect(() => {
-    const k = e => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
+function Drawer({ vc, statuses, onClose, toast }) {
+  const [t, setT] = useState('signals');
   const counted = vc.items.filter(i => i.points > 0);
   const best = counted[0];
+  const TABS = [['signals', 'Signals'], ['score', 'Score'], ['partner', 'Partner & thesis'], ['warm', 'Warm path']];
   return (
     <div className="overlay" onClick={onClose}>
-      <aside className="drawer" onClick={e => e.stopPropagation()}>
-        <div className="drawer-h">
-          <ScoreRing score={vc.score} band={vc.band} size={60} />
-          <div style={{ flex: 1 }}>
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label={vc.firm} onClick={e => e.stopPropagation()}>
+        <header className="drawer-h">
+          <div>
             <h2>{vc.firm}</h2>
-            <div className="small muted">{vc.partner_name ? `${vc.partner_name}, ${vc.partner_title || ''}` : 'No tracked partner (firm-level)'} · {vc.vc_type || vc.vc_group}{vc.confidence ? ` · ${vc.confidence} confidence` : ''}
-              {vc.partner_verified_on_firm_site && vc.partner_verified_on_firm_site !== 'yes' && <span className="pill p-warm">verify partner</span>}
-              {vc.website && <> · <a href={`https://${vc.website}`} target="_blank">{vc.website}</a></>}</div>
-            <span className={`pill p-${vc.band}`}>{BANDS[vc.band].label}</span>{vc.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}
+            <div className="row small muted">{vc.partner_name || 'No tracked partner'} · {vc.vc_type || vc.vc_group}</div>
+            <div className="row" style={{ marginTop: 8 }}><span className="score mono lg">{vc.score}</span><BandChip band={vc.band} />
+              {vc.flags.includes('Check for conflict') && <span className="chip-alert">Check for conflict</span>}</div>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close"><Icon d={I.x} /></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </header>
+        <p className="action-line">{vc.recommended_action}</p>
+        <StatusSetter vc={vc} statuses={statuses} toast={toast} />
+        <div className="tabs" role="tablist">
+          {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={t === k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => setT(k)}>{l}</button>)}
         </div>
 
-        <section>
-          <h4>Your status</h4>
-          <StatusEditor v={vc} statuses={statuses} />
-        </section>
-
-        <section>
-          <h4>Recommended action</h4>
-          <p className="action">{vc.recommended_action || 'Not scored yet'}</p>
-        </section>
-
-        <section>
-          <h4>How the score was worked out (Rubric v4)</h4>
-          {vc.checkout && <div className="checkoutbox small"><span className="pill p-checkout">Check out</span> Older news (not scored): {vc.checkout.summary} · {fmt(vc.checkout.published_at)} · <a href={vc.checkout.url} target="_blank">{host(vc.checkout.url)} ↗</a></div>}
-          {vc.items.length === 0 ? <p className="muted small">No signal in the last 30 days, so the score is 0{vc.checkout ? ' (Check out band)' : ' (no news found: unknown, not inactive)'}.</p> : (
-            <>
-              <div className="wrap"><table className="tbl small">
-                <thead><tr><th>Signal</th><th>What ×0.50</th><th>Logistics ×0.30</th><th>Fresh ×0.15</th><th>Led ×0.05</th><th>= Pts</th></tr></thead>
-                <tbody>{vc.items.map((i, k) => (
-                  <tr key={k} className={i.best ? 'bestrow' : ''}>
-                    <td><span className="tag">{i.type}</span>{TYPE_NAMES[i.type] || ''}{i.best && <span className="pill p-reach">best</span>}{i.copies > 1 && <span className="muted"> · {i.copies} reports, counted once</span>}
-                      {i.note && <div className="muted">{i.note}</div>}</td>
-                    <td className="mono">{i.what} <span className="muted">→ {(i.what * 0.5).toFixed(1)}</span></td>
-                    <td className="mono">{i.logistics} <span className="muted">({i.manual ? 'core, logged' : i.rel}) → {(i.logistics * 0.3).toFixed(1)}</span></td>
-                    <td className="mono">{i.fresh} <span className="muted">({i.days} d) → {(i.fresh * 0.15).toFixed(1)}</span></td>
-                    <td className="mono">{i.led} <span className="muted">{i.type === 'S1' ? `(${i.deal_role || 'unknown'})` : '(not a deal)'} → {(i.led * 0.05).toFixed(1)}</span></td>
-                    <td className="mono"><b>{i.points}</b></td>
-                  </tr>
-                ))}</tbody>
-              </table></div>
-              <p className="formula mono small">
-                {best ? <>best {best.points.toFixed(1)} + 5 × {vc.extra} extra signal{vc.extra === 1 ? '' : 's'} (max +15) = {vc.raw}
-                  {vc.cap < 100 ? ` → capped at ${vc.cap} (poor fit)` : ''} → <b>{vc.score}</b> · {BANDS[vc.band].label}</> : 'Only skipped or flag items (0 points).'}
-              </p>
-              {vc.recomputed !== vc.score && <p className="small reason">Stored score {vc.score}; recomputing now gives {vc.recomputed}. It updates on the next run.</p>}
-            </>
-          )}
-        </section>
-
-        <section>
-          <h4>Signals (last 30 days)</h4>
-          {vc.items.length === 0 ? <p className="muted small">None in tracked sources.</p> : vc.items.map((i, k) => (
+        {t === 'signals' && <div className="stack">
+          {vc.checkout && <div className="sig checkout"><BandChip band="checkout" small /><Clamp text={vc.checkout.summary} lines={2} /><div className="row small muted"><span className="mono">{fmt(vc.checkout.published_at)}</span><SourceLink url={vc.checkout.url} /></div></div>}
+          {vc.items.length === 0 && !vc.checkout && <p className="empty">No signal in tracked sources in the last 30 days.</p>}
+          {vc.items.map((i, k) => (
             <div key={k} className="sig">
-              <div className="row" style={{ gap: 4 }}><span className="tag">{i.type}</span><span className="tag t-rel">{i.manual ? 'core (logged)' : i.relevance}</span><WhoTag item={i} /><span className="muted small">{fmt(i.published_at)}</span></div>
-              <a href={i.url} target="_blank">{i.summary} <Icon d={I.ext} size={12} /></a>
-              {i.copies > 1 && <details><summary>{i.copies} reports of this event</summary>{i.reports.map((r, j) => (
-                <div key={j} className="small"><a href={r.url} target="_blank">{host(r.url)}</a> · {fmt(r.published_at)} · {r.summary}</div>
-              ))}</details>}
+              <div className="row small"><b>{i.plain}</b><span className="muted mono">{fmt(i.published_at)}</span>{i.copies > 1 && <span className="muted">{i.copies} reports</span>}<span className="muted">{i.who}</span></div>
+              <Clamp text={i.summary} lines={2} />
+              <SourceLink url={i.url} />
             </div>
           ))}
-        </section>
+        </div>}
 
-        {vc.thesis_quote && <section><h4>Seed evidence</h4><p className="small">"{vc.thesis_quote}" {vc.thesis_url && <a href={vc.thesis_url} target="_blank">source ↗</a>}</p></section>}
-        {vc.logistics_evidence && <section><h4>Logistics deals on record (warm-path lead)</h4>
-          <p className="small">{vc.logistics_evidence} {vc.logistics_source_url && <a href={vc.logistics_source_url} target="_blank">source ↗</a>}</p>
-          {vc.second_logistics_deal && <p className="small">{vc.second_logistics_deal} {vc.second_logistics_source_url && <a href={vc.second_logistics_source_url} target="_blank">source ↗</a>}</p>}</section>}
-        {vc.watch_outs && <section><h4>Watch-outs (research)</h4><p className="small">{vc.watch_outs}</p></section>}
+        {t === 'score' && <div className="stack">
+          {counted.length === 0 ? <p className="empty">Nothing scored, so the score is 0{vc.checkout ? ' (Check out band: older news is shown, never scored)' : ''}.</p> : counted.map((i, k) => (
+            <div key={k} className="scorebox">
+              <div className="row small"><b>{i.plain}</b><span className="muted">{fmt(i.published_at)}</span>{i.best && <span className="tag">best</span>}<span className="mono right">{i.points}</span></div>
+              {[['What', i.what, 0.5, 50], ['Logistics', i.logistics, 0.3, 30], ['Fresh', i.fresh, 0.15, 15], ['Led', i.led, 0.05, 5]].map(([l, raw, w, max]) => (
+                <div key={l} className="bar-row">
+                  <span className="bar-l small">{l} <span className="muted">{Math.round(w * 100)}%</span></span>
+                  <span className="bar"><i style={{ width: `${(raw * w / max) * 100}%` }} /></span>
+                  <span className="mono small">{(raw * w).toFixed(1)}<span className="muted">/{max}</span></span>
+                </div>
+              ))}
+            </div>
+          ))}
+          {best && <p className="formula mono small">best {best.points.toFixed(1)} + 5 × {vc.extra} extra signal{vc.extra === 1 ? '' : 's'} (max +15) = {vc.raw}{vc.cap < 100 ? ` → capped at ${vc.cap}` : ''} → <b>{vc.score}</b></p>}
+        </div>}
 
-        <section className="readonly">
-          <h4>Your original columns <span className="pill p-unknown">read-only</span></h4>
-          <dl>
-            <dt>Status (Neon)</dt><dd>{vc.status || '-'}</dd>
-            <dt>Last contact</dt><dd>{vc.last_contact_date ? fmt(vc.last_contact_date, { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</dd>
-            <dt>Contact history</dt><dd>{vc.contact_history || '-'}</dd>
-            <dt>Notes</dt><dd>{vc.personal_notes || '-'}</dd>
-          </dl>
-          <p className="muted small">Never written by code, never sent to Gemini or Tavily (proof: /api/verify).</p>
-        </section>
+        {t === 'partner' && <dl className="kv">
+          <dt>Partner</dt><dd>{vc.partner_name ? `${vc.partner_name}${vc.partner_title ? `, ${vc.partner_title}` : ''}` : '-'}{vc.partner_verified_on_firm_site !== 'yes' && <span className="tag">verify partner</span>}</dd>
+          {vc.team_page_url && <><dt>Team page</dt><dd><SourceLink url={vc.team_page_url} /></dd></>}
+          <dt>Seed evidence</dt><dd>{vc.thesis_quote ? `"${vc.thesis_quote}"` : '-'} {vc.thesis_url && <SourceLink url={vc.thesis_url} />}</dd>
+          <dt>Type</dt><dd>{vc.vc_type || '-'}</dd>
+          {vc.watch_outs && <><dt>Watch-outs</dt><dd>{vc.watch_outs}</dd></>}
+          <dt><Lock size={12} /> Status</dt><dd>{vc.status || '-'}</dd>
+          <dt><Lock size={12} /> Last contact</dt><dd className="mono">{vc.last_contact_date ? fmt(vc.last_contact_date, { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</dd>
+          <dt><Lock size={12} /> Contact history</dt><dd>{vc.contact_history || '-'}</dd>
+          <dt><Lock size={12} /> My notes</dt><dd>{vc.personal_notes || '-'}</dd>
+        </dl>}
+
+        {t === 'warm' && <div className="stack">
+          {vc.logistics_evidence ? <>
+            <p>Warm path: ask a founder from their logistics portfolio.</p>
+            <div className="sig"><Clamp text={vc.logistics_evidence} lines={3} /><SourceLink url={vc.logistics_source_url} /></div>
+            {vc.second_logistics_deal && <div className="sig"><Clamp text={vc.second_logistics_deal} lines={3} /><SourceLink url={vc.second_logistics_source_url} /></div>}
+            <p className="muted small">Company names exactly as in the research sheet. No founder names or LinkedIn links are invented.</p>
+          </> : <p className="empty">No logistics deal on record for this VC.</p>}
+        </div>}
       </aside>
     </div>
   );
 }
 
+/* ---------------- Changes ---------------- */
+function Changes({ data, open }) {
+  const [i, setI] = useState(0);
+  const sel = data.changes[i];
+  if (!sel) return <p className="empty">No score snapshots yet. Changes appear after the second run.</p>;
+  return (
+    <div className="stack">
+      <div className="toolbar">
+        <label className="row small">Compare
+          <select value={i} onChange={e => setI(Number(e.target.value))}>
+            {data.changes.map((c, k) => <option key={c.run.id} value={k}>Run #{c.run.id} ({c.run.trigger}){c.prev ? ` vs #${c.prev}` : ''}</option>)}
+          </select>
+        </label>
+        <span className="muted small">{sel.run.at ? fmtDT(sel.run.at) : ''} · {sel.rows.length} VC{sel.rows.length === 1 ? '' : 's'} changed</span>
+      </div>
+      {sel.rows.length === 0 ? <p className="empty">Nothing changed in this run.</p> : (
+        <div className="tablewrap card flush"><table className="ptable">
+          <thead><tr><th>VC</th><th>Score</th><th>Band</th><th><span className="sr">Direction</span></th><th>Reason</th></tr></thead>
+          <tbody>{sel.rows.map(c => {
+            const up = c.to_score > c.from_score, down = c.to_score < c.from_score;
+            return (
+              <tr key={c.vc_id} onClick={() => open(c.vc_id)}>
+                <td><b>{c.firm}</b></td>
+                <td className="mono">{c.from_score} → <b>{c.to_score}</b></td>
+                <td className="nowrap"><BandChip band={c.from_band} small /> → <BandChip band={c.to_band} small /></td>
+                <td>{up ? <ArrowUp size={16} className="up" aria-label="up" /> : down ? <ArrowDown size={16} className="down" aria-label="down" /> : <span className="muted">•</span>}</td>
+                <td className="small"><Clamp text={c.summary || c.to_action} lines={1} /> {c.url && <SourceLink url={c.url} />}</td>
+              </tr>
+            );
+          })}</tbody>
+        </table></div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Calendar ---------------- */
-function Calendar({ data, open }) {
+function Calendar({ data, open, go, notes, setNotes, toast }) {
   const [ym, setYm] = useState(data.today.slice(0, 7));
   const [day, setDay] = useState(data.today);
+  const [panel, setPanel] = useState('day');
   const [y, m] = ym.split('-').map(Number);
 
   const marks = useMemo(() => {
     const M = {};
-    const add = (d, item) => { (M[d] = M[d] || []).push(item); };
-    data.runs.filter(r => ['cron', 'manual', 'verify'].includes(r.trigger)).forEach(r => add(istDay(r.started_at), { kind: 'run', label: `Run #${r.id} (${r.trigger}): ${r.items_fetched} items, ₹${r.cost_inr.toFixed(2)}` }));
-    // Scheduled cron runs (Mon + Thu 6:30am IST) from tomorrow to end of the visible range
-    for (let d = addDays(data.today, 1); d <= addDays(data.today, 70); d = addDays(d, 1)) {
-      const wd = new Date(d + 'T00:00:00Z').getUTCDay();
-      if (wd === 1 || wd === 4) add(d, { kind: 'sched', label: 'Scheduled run, 6:30am IST' });
-    }
-    const evSeen = new Set();
+    const add = (d, k, item) => { (M[d] ||= { runs: 0, signals: [], events: [], notes: 0 }); if (k === 'runs') M[d].runs++; else if (k === 'notes') M[d].notes++; else M[d][k].push(item); };
+    data.runs.filter(r => ['cron', 'manual', 'verify'].includes(r.trigger)).forEach(r => add(istDay(r.started_at), 'runs'));
+    const seen = new Set();
     data.events.filter(s => s.event_start).forEach(s => {
-      const k = `${s.vc_id}|${s.event_name}|${s.event_start}`; if (evSeen.has(k)) return; evSeen.add(k);
+      const k = `${s.vc_id}|${s.event_name}|${s.event_start}`; if (seen.has(k)) return; seen.add(k);
       const end = s.event_end && s.event_end >= s.event_start ? s.event_end : s.event_start;
-      for (let d = s.event_start; d <= end; d = addDays(d, 1)) add(d, { kind: 'event', label: `${s.event_name || 'Event'}${s.event_city ? ` (${s.event_city})` : ''} · ${s.firm}`, vc_id: s.vc_id, url: s.url });
+      for (let d = s.event_start; d <= end; d = addDays(d, 1)) add(d, 'events', s);
     });
-    data.events.filter(s => s.published_at).forEach(s => add(s.published_at, { kind: 'signal', label: `${s.firm}: ${s.summary}`, vc_id: s.vc_id, url: s.url, type: s.type }));
+    data.events.filter(s => s.published_at).forEach(s => add(d10(s.published_at), 'signals', s));
+    notes.forEach(n => add(n.note_date, 'notes'));
     return M;
-  }, [data]);
+  }, [data, notes]);
+  const sched = d => { const wd = new Date(d + 'T00:00:00Z').getUTCDay(); return d > data.today && (wd === 1 || wd === 4); };
 
   const first = new Date(Date.UTC(y, m - 1, 1));
-  const startPad = (first.getUTCDay() + 6) % 7; // Monday first
+  const pad = (first.getUTCDay() + 6) % 7;
   const daysIn = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const cells = [...Array(startPad).fill(null), ...Array.from({ length: daysIn }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`)];
-  const shift = n => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setYm(d.toISOString().slice(0, 7)); };
-  const windowStart = addDays(data.today, -30);
-  const sel = marks[day] || [];
+  const cells = [...Array(pad).fill(null), ...Array.from({ length: daysIn }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`)];
+  const shift = n => setYm(new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7));
+  const sel = marks[day] || { runs: 0, signals: [], events: [], notes: 0 };
 
   return (
-    <div className="grid-cal">
+    <div className="cal-layout">
       <div className="card">
-        <div className="card-h">
-          <h3>{first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</h3>
+        <div className="sec-h">
+          <h2>{first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</h2>
           <div className="row">
-            <button className="icon-btn" onClick={() => shift(-1)} aria-label="Previous month"><Icon d={I.left} /></button>
-            <button className="btn" onClick={() => { setYm(data.today.slice(0, 7)); setDay(data.today); }}>Today</button>
-            <button className="icon-btn" onClick={() => shift(1)} aria-label="Next month"><Icon d={I.right} /></button>
+            <button className="icon-btn" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft size={18} /></button>
+            <button className="btn ghost sm" onClick={() => { setYm(data.today.slice(0, 7)); setDay(data.today); }}>Today</button>
+            <button className="icon-btn" onClick={() => shift(1)} aria-label="Next month"><ChevronRight size={18} /></button>
           </div>
         </div>
         <div className="cal">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <div key={d} className="cal-h">{d}</div>)}
           {cells.map((d, i) => {
             if (!d) return <div key={i} className="cal-c empty" />;
-            const ms = marks[d] || [];
-            const kinds = new Set(ms.map(x => x.kind));
-            const nSig = ms.filter(x => x.kind === 'signal').length;
-            const ev = ms.find(x => x.kind === 'event');
+            const mk = marks[d] || { runs: 0, signals: [], events: [], notes: 0 };
+            const ev = mk.events[0];
             return (
-              <button key={i} className={`cal-c ${d === data.today ? 'today' : ''} ${d === day ? 'sel' : ''} ${d >= windowStart && d <= data.today ? 'inwin' : ''}`} onClick={() => setDay(d)}>
-                <span className="cal-n">{Number(d.slice(8))}</span>
-                {ev && <span className="cal-ev">{ev.label.split(' · ')[0]}</span>}
-                <span className="cal-dots">
-                  {(kinds.has('run') || kinds.has('sched')) && <i className={kinds.has('run') ? 'k-run' : 'k-sched'} title="run" />}
-                  {nSig > 0 && <i className="k-signal" title={`${nSig} signals`} />}
-                  {nSig > 1 && <small>{nSig}</small>}
+              <button key={i} className={`cal-c ${d === data.today ? 'today' : ''} ${d === day ? 'sel' : ''}`} onClick={() => setDay(d)} aria-label={`${fmt(d, { day: 'numeric', month: 'long' })}: ${mk.signals.length} signals, ${mk.events.length} events, ${mk.runs} runs, ${mk.notes} notes`}>
+                <span className="cal-n mono">{Number(d.slice(8))}</span>
+                {ev && <span className={`cal-ev ${isIndia(ev) ? '' : 'abroad'}`} title={ev.event_name}>▲ {ev.event_name}</span>}
+                <span className="cal-marks">
+                  {(mk.runs > 0 || sched(d)) && <i className={mk.runs ? 'mk-run' : 'mk-sched'} title={mk.runs ? 'run' : 'scheduled run'} />}
+                  {mk.signals.length > 0 && <span className="mk-sig" title={`${mk.signals.length} signals`}>◆{mk.signals.length > 1 ? mk.signals.length : ''}</span>}
+                  {mk.notes > 0 && <i className="mk-note" title="note" />}
                 </span>
               </button>
             );
           })}
         </div>
-        <div className="legend">
-          <span><i className="k-run" />Run done</span><span><i className="k-sched" />Scheduled run (Mon/Thu)</span>
-          <span><i className="k-event" />Event</span><span><i className="k-signal" />Signal published</span><span><i className="k-win" />30-day window</span>
-        </div>
+        <div className="legend small muted"><span><i className="mk-run" /> run day</span><span><i className="mk-sched" /> scheduled (Mon/Thu 6:30)</span><span>◆ signal</span><span><span className="cal-ev">▲ India event</span></span><span><span className="cal-ev abroad">▲ event abroad</span></span><span><i className="mk-note" /> note</span></div>
       </div>
+
       <div className="card">
-        <div className="card-h"><h3>{fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}</h3></div>
-        {sel.length === 0 ? <p className="muted">Nothing on this day.</p> : sel.map((x, i) => (
-          <div key={i} className={`dayitem d-${x.kind}`} onClick={() => x.vc_id && open(x.vc_id)}>
-            <span className="tag">{x.kind === 'signal' ? x.type : x.kind === 'sched' ? 'scheduled' : x.kind}</span>
-            <span>{x.label}</span>
-            {x.url && <a href={x.url} target="_blank" onClick={e => e.stopPropagation()}><Icon d={I.ext} size={12} /></a>}
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={panel === 'day'} className={`tab ${panel === 'day' ? 'on' : ''}`} onClick={() => setPanel('day')}>Day</button>
+          <button role="tab" aria-selected={panel === 'notes'} className={`tab ${panel === 'notes' ? 'on' : ''}`} onClick={() => setPanel('notes')}>My notes</button>
+        </div>
+        <h3 className="dayhead">{fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
+        {panel === 'day' ? (
+          <div className="stack">
+            {sel.runs > 0 && <button className="linkbtn" onClick={() => go('report')}>{sel.runs} run{sel.runs > 1 ? 's' : ''} this day → Last run report</button>}
+            {sel.events.map((e, k) => <div key={'e' + k} className="dayitem" onClick={() => open(e.vc_id)}><span className={`cal-ev ${isIndia(e) ? '' : 'abroad'}`}>▲ {e.event_name}</span><span className="small">{e.firm}{e.event_city ? ` · ${e.event_city}` : ''}</span><SourceLink url={e.url} /></div>)}
+            {sel.signals.map((s, k) => <div key={'s' + k} className="dayitem" onClick={() => open(s.vc_id)}><b className="small">◆ {s.plain}</b><span className="small">{s.firm}: <Clamp text={s.summary} lines={2} /></span><SourceLink url={s.url} /></div>)}
+            {!sel.runs && !sel.events.length && !sel.signals.length && <p className="empty">No signals or events on this day.</p>}
           </div>
-        ))}
+        ) : <Notes day={day} notes={notes} setNotes={setNotes} toast={toast} setDay={d => { setDay(d); setYm(d.slice(0, 7)); }} />}
       </div>
     </div>
   );
 }
 
-/* ---------------- Signals ---------------- */
-function Signals({ data, open }) {
-  const [type, setType] = useState('all');
-  const list = data.events.filter(s => type === 'all' || s.type === type);
-  const reports = data.events.reduce((a, e) => a + e.reports.length, 0);
+function NoteEditor({ note, day, onSaved, onDeleted, toast }) {
+  const [text, setText] = useState(note?.body || '');
+  const [state, setState] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const timer = useRef(null);
+  const save = async body => {
+    if (!body.trim()) return;
+    setState('Saving…');
+    const r = note
+      ? await fetch(`/api/notes/${note.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body }) })
+      : await fetch('/api/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note_date: day, body }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setState(''); toast(j.error || 'Could not save note', 'err'); return; }
+    setState('Saved');
+    onSaved(j.note, !note);
+    if (!note) { toast('Note saved'); setText(''); }
+  };
+  const onChange = e => {
+    const v = e.target.value.slice(0, 2000); setText(v); setState('');
+    if (note) { clearTimeout(timer.current); timer.current = setTimeout(() => save(v), 800); } // autosave existing notes
+  };
+  const del = async () => {
+    const r = await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
+    if (r.ok) { onDeleted(note.id); toast('Note deleted'); } else toast('Could not delete', 'err');
+  };
   return (
-    <>
-      <div className="card">
-        <div className="card-h"><h3>Log a signal</h3><span className="muted small">e.g. a LinkedIn post you saw</span></div>
-        <LogSignal vcs={[...data.vcs].sort((a, b) => a.firm.localeCompare(b.firm))} today={data.today} />
+    <div className="note">
+      <textarea value={text} onChange={onChange} placeholder={note ? '' : 'Write a note for this day…'} rows={3} maxLength={2000} aria-label={note ? 'Edit note' : 'New note'} />
+      <div className="row small">
+        <span className="muted mono">{text.length}/2000</span>
+        <span className="saved">{state}</span>
+        <span className="right row">
+          {!note && <button className="btn primary sm" disabled={!text.trim()} onClick={() => save(text)}>Save note</button>}
+          {note && (confirm
+            ? <><button className="btn danger sm" onClick={del}>Confirm delete</button><button className="btn ghost sm" onClick={() => setConfirm(false)}>Cancel</button></>
+            : <button className="btn ghost sm" onClick={() => setConfirm(true)}><Trash2 size={14} />Delete</button>)}
+        </span>
       </div>
-      <div className="card">
-        <div className="filters">
-          <div className="small muted">{data.events.length} events in the last 30 days, from {reports} reports. Duplicates across outlets are grouped and counted once.</div>
-          <select value={type} onChange={e => setType(e.target.value)}>
-            <option value="all">All types</option>
-            {Object.entries(TYPE_NAMES).map(([k, v]) => <option key={k} value={k}>{k} {v}</option>)}
-          </select>
-        </div>
-        <div className="feed">
-          {list.map(s => (
-            <div key={s.key} className="feeditem">
-              <div className="feed-meta">
-                <b className="link" onClick={() => open(s.vc_id)}>{s.firm}</b>
-                <span className="tag">{s.type}</span><span className="tag t-rel">{s.manual ? 'core (logged)' : s.relevance}</span>
-                {s.deal_stage && <span className="tag t-rel">{s.deal_stage}</span>}
-                <WhoTag item={s} />
-                <span className="muted small">{fmt(s.published_at)} · {s.manual ? 'logged by Vikram' : host(s.url)}</span>
-              </div>
-              <a href={s.url} target="_blank">{s.summary}</a>
-              {s.reports.length > 1 && <details><summary>{s.reports.length} reports of this event (numbers can differ by outlet)</summary>{s.reports.map((r, j) => (
-                <div key={j} className="small"><a href={r.url} target="_blank">{host(r.url)}</a> · {fmt(r.published_at)} · {r.summary}</div>
-              ))}</details>}
-            </div>
-          ))}
-          {list.length === 0 && <p className="muted">No signals.</p>}
-        </div>
-        <details className="rejected-list">
-          <summary>Rejected ({data.rejected.length}): what the pipeline threw out, and why</summary>
-          {data.rejected.map(s => (
-            <div key={s.id} className="feeditem rejected">
-              <div className="feed-meta"><b>{s.firm}</b>{s.type && <span className="tag">{s.type}</span>}<span className="muted small">{fmt(s.published_at)} · {s.source}</span></div>
-              <a href={s.url} target="_blank">{s.summary || s.title}</a>
-              <div className="small reason">Not counted: {s.rejected_reason}</div>
-            </div>
-          ))}
-        </details>
-      </div>
-    </>
+    </div>
   );
 }
 
-function LogSignal({ vcs, today }) {
+function Notes({ day, notes, setNotes, toast, setDay }) {
+  const dayNotes = notes.filter(n => n.note_date === day);
+  const onSaved = (n, isNew) => setNotes(ns => isNew ? [n, ...ns] : ns.map(x => x.id === n.id ? n : x));
+  const onDeleted = id => setNotes(ns => ns.filter(x => x.id !== id));
+  return (
+    <div className="stack">
+      {dayNotes.map(n => <NoteEditor key={n.id} note={n} day={day} onSaved={onSaved} onDeleted={onDeleted} toast={toast} />)}
+      <NoteEditor key={`new-${day}-${dayNotes.length}`} note={null} day={day} onSaved={onSaved} onDeleted={onDeleted} toast={toast} />
+      <p className="muted small">Visible to anyone with this link.</p>
+      <h4>All notes</h4>
+      {notes.length === 0 ? <p className="empty">No notes yet.</p> : (
+        <ul className="allnotes">{[...notes].sort((a, b) => b.note_date.localeCompare(a.note_date) || String(b.created_at).localeCompare(String(a.created_at))).map(n => (
+          <li key={n.id}><button className="linkbtn" onClick={() => setDay(n.note_date)}><span className="mono">{fmt(n.note_date)}</span></button> <Clamp text={n.body} lines={1} className="small" /></li>
+        ))}</ul>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Signals ---------------- */
+function Signals({ data, open, toast }) {
+  const [sheet, setSheet] = useState(false);
+  const [rej, setRej] = useState(false);
+  const weeks = useMemo(() => {
+    const W = new Map();
+    for (const e of data.events) { const k = weekStart(e.published_at); (W.get(k) || W.set(k, []).get(k)).push(e); }
+    return [...W.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [data.events]);
+  return (
+    <div className="stack">
+      <div className="toolbar">
+        <span className="muted small">{data.events.length} events in the last 30 days, duplicates across outlets counted once</span>
+        <button className="btn primary" onClick={() => setSheet(true)}><Plus size={16} />Log a signal</button>
+      </div>
+      {weeks.length === 0 && <p className="empty">No accepted signals in the last 30 days.</p>}
+      {weeks.map(([wk, list]) => (
+        <section key={wk} className="card">
+          <h3 className="weekhead">Week of {fmt(wk, { day: 'numeric', month: 'short' })}</h3>
+          <ul className="feed">{list.map(s => (
+            <li key={s.key}>
+              <span className="feed-type">{s.plain}</span>
+              <div className="feed-body">
+                <div className="row small"><button className="linkbtn" onClick={() => open(s.vc_id)}><b>{s.firm}</b></button>
+                  <span className="mono muted">{fmt(s.published_at)}</span><SourceLink url={s.url} />
+                  <span className="info" tabIndex={0} title={[`relevance: ${s.manual ? 'core (logged)' : s.relevance}`, s.deal_stage && `stage: ${s.deal_stage}`, s.person && `person: ${s.person} (${s.who})`, s.reports.length > 1 && `${s.reports.length} reports of this event`].filter(Boolean).join(' · ')}><Info size={14} aria-label="details" /></span>
+                </div>
+                <Clamp text={s.summary} lines={2} className="small" />
+              </div>
+            </li>
+          ))}</ul>
+        </section>
+      ))}
+      <section className="card">
+        <button className="collapse-h" aria-expanded={rej} onClick={() => setRej(!rej)}>
+          {rej ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<h2>Rejected</h2><span className="pill-count mono">{data.rejected.length}</span>
+        </button>
+        {rej && <ul className="feed">{data.rejected.map(s => (
+          <li key={s.id}><span className="feed-type muted">{s.type || '-'}</span><div className="feed-body">
+            <div className="row small"><b>{s.firm}</b><span className="mono muted">{fmt(s.published_at)}</span><SourceLink url={s.url} /></div>
+            <Clamp text={s.summary || s.title} lines={1} className="small" /><div className="small muted">Why: {s.rejected_reason}</div></div></li>
+        ))}</ul>}
+      </section>
+      {sheet && <LogSheet vcs={data.vcs} today={data.today} onClose={() => setSheet(false)} toast={toast} />}
+    </div>
+  );
+}
+
+function LogSheet({ vcs, today, onClose, toast }) {
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
   const [date, setDate] = useState('');
-  const tooOld = date && date < addDays(today, -30);
+  const [msg, setMsg] = useState(null);
+  const age = date ? Math.round((Date.parse(today) - Date.parse(date)) / 86400000) : null;
   async function submit(e) {
     e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.target));
     setBusy(true); setMsg(null);
-    try {
-      const r = await fetch('/api/log', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(f) });
-      const j = await r.json();
-      setMsg({ ok: j.ok, text: j.message });
-      if (j.ok) { e.target.reset(); setDate(''); setTimeout(() => location.reload(), 1500); }
-    } catch (err) { setMsg({ ok: false, text: err.message }); }
-    setBusy(false);
+    const f = Object.fromEntries(new FormData(e.target));
+    const r = await fetch('/api/log', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(f) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : { message: 'Network error' };
+    setBusy(false); setMsg(j);
+    if (j.ok) { toast('Signal logged'); setTimeout(() => location.reload(), 1200); } else toast(j.message || 'Not counted', 'err');
   }
   return (
-    <form className="logform" onSubmit={submit}>
-      <select name="vc_id" required defaultValue=""><option value="" disabled>Select VC</option>{vcs.map(v => <option key={v.vc_id} value={v.vc_id}>{v.firm}</option>)}</select>
-      <input name="url" type="url" placeholder="Link (LinkedIn post, article)" required />
-      <input name="post_date" type="date" max={today} required value={date} onChange={e => setDate(e.target.value)} />
-      <input name="line" placeholder="One line: what happened" required />
-      <button className="btn primary" disabled={busy}>{busy ? 'Processing...' : 'Log signal'}</button>
-      <div className={`small formmsg ${msg ? (msg.ok ? 'ok' : 'bad') : tooOld ? 'bad' : 'muted'}`}>
-        {msg ? msg.text : tooOld ? 'Older than 30 days: it will be stored but not counted (30-day rule).' : 'Processed immediately. Gemini labels the type, relevance is treated as core, the 30-day rule still applies.'}
-      </div>
-    </form>
+    <div className="overlay" onClick={onClose}>
+      <aside className="drawer sheet" role="dialog" aria-modal="true" aria-label="Log a signal" onClick={e => e.stopPropagation()}>
+        <header className="drawer-h"><h2>Log a signal</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
+        <form className="form" onSubmit={submit}>
+          <label>VC<select name="vc_id" required defaultValue=""><option value="" disabled>Select VC</option>{[...vcs].sort((a, b) => a.firm.localeCompare(b.firm)).map(v => <option key={v.vc_id} value={v.vc_id}>{v.firm}</option>)}</select></label>
+          <label>Link<input name="url" type="url" placeholder="https://www.linkedin.com/posts/…" required /></label>
+          <label>Post date<input name="post_date" type="date" max={today} required value={date} onChange={e => setDate(e.target.value)} />
+            {age != null && <span className={`small ${age > 30 ? 'warn' : 'muted'}`}>{age > 30 ? `${age} days old: stored but not counted (30-day rule)` : `${age} days old: inside the 30-day window`}</span>}</label>
+          <label>One line<input name="line" placeholder="What happened" required /></label>
+          <button className="btn primary" disabled={busy}>{busy ? 'Processing…' : 'Log signal'}</button>
+          <p className="muted small">Processed now: Gemini labels the type, relevance is treated as core, the 30-day rule still applies.</p>
+          {msg && <p className={`small ${msg.ok ? '' : 'warn'}`}>{msg.message}</p>}
+        </form>
+      </aside>
+    </div>
   );
 }
 
-/* ---------------- Runs ---------------- */
-const TRIGGER_NOTE = { cron: 'scheduled pipeline run', manual: 'Run now / CLI pipeline run', verify: 'pipeline run via /api/verify', log: 'Log a signal (1 item)',
-  status: 'your status change (rescore, no fetch)', relabel: 'one-off v3 relabel of stored signals', snapshot: 'score snapshot before v3' };
-function Runs({ runs }) {
-  const pipeline = runs.filter(r => ['cron', 'manual', 'verify'].includes(r.trigger));
-  const tot = runs.reduce((a, r) => ({ inr: a.inr + r.cost_inr, cr: a.cr + r.tavily_credits, tk: a.tk + r.gemini_input_tokens + r.gemini_output_tokens }), { inr: 0, cr: 0, tk: 0 });
-  const max = Math.max(1, ...runs.map(r => r.cost_inr));
+/* ---------------- Last run report ---------------- */
+const TRIGGER_NOTE = { cron: 'scheduled run', manual: 'Run now / CLI', verify: 'via /api/verify', log: 'Log a signal', status: 'status change (rescore)', relabel: 'v3 relabel', snapshot: 'score snapshot' };
+
+function RunNow({ nextAllowedAt, toast }) {
+  const [now, setNow] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const wait = nextAllowedAt ? Math.max(0, Date.parse(nextAllowedAt) - now) : 0;
+  const mmss = `${Math.floor(wait / 60000)}:${String(Math.floor((wait % 60000) / 1000)).padStart(2, '0')}`;
+  async function go() {
+    setBusy(true); toast('Run started: feeds, 50 searches, labelling (about a minute)');
+    const r = await fetch('/api/run', { method: 'POST' }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : { error: 'Network error' };
+    setBusy(false);
+    if (r?.ok) { toast(`Done: ${j.fetched} fetched, ${j.counted} counted`); setTimeout(() => location.reload(), 1200); } else toast(j.error || 'Run failed', 'err');
+  }
   return (
-    <>
-      <div className="kpis">
-        <div className="kpi static"><small>Pipeline runs</small><b>{pipeline.length}</b><span className="muted small">{runs.length} entries incl. logs / status</span></div>
-        <div className="kpi static"><small>Total cost</small><b>₹{tot.inr.toFixed(2)}</b></div>
-        <div className="kpi static"><small>Tavily credits</small><b>{tot.cr}</b></div>
-        <div className="kpi static"><small>Gemini tokens</small><b>{tot.tk.toLocaleString('en-IN')}</b></div>
+    <div className="runnow">
+      <button className="btn primary" onClick={go} disabled={busy || wait > 0}><Play size={14} />{busy ? 'Running…' : 'Run now'}</button>
+      <span className="small muted">{wait > 0 ? <>Next allowed in <b className="mono">{mmss}</b></> : 'Limited to once per 30 minutes'}</span>
+    </div>
+  );
+}
+
+function Report({ data, open, toast }) {
+  const r = data.lastRun;
+  const v = data.verify || {};
+  const ok = !v.error && v.guard;
+  const next = data.nextRun ? new Date(data.nextRun).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '-';
+  return (
+    <div className="stack-lg">
+      <div className="card toprow">
+        <div><span className="muted small">Next run</span><b className="mono">{next}</b></div>
+        <div><span className="muted small">Last run</span><b>{r ? <>#{r.id} · {r.trigger} · <span className="mono">{fmtDT(r.finished_at)}</span></> : '-'}</b></div>
+        <RunNow nextAllowedAt={data.nextAllowedAt} toast={toast} />
       </div>
-      <div className="card">
-        <p className="muted small">Every entry is listed. Run ids skip #1, #3, #5 and #6: those were build-time test runs deleted on 12 Oct (a local test log, and the test-set import that broke the live-data rule). Scheduled runs are skipped if a full run succeeded in the last 6 hours.
-          Cost = Tavily credits × $0.008 + Gemini Flash tokens at $0.50 / $3.00 per 1M (in / out), at ₹88/$ (list prices; free tiers make the bill ₹0 at this volume).</p>
-        <div className="wrap"><table className="tbl">
-          <thead><tr><th>#</th><th>Trigger</th><th>Started (IST)</th><th>Status</th><th>Fetched</th><th>New</th><th>Counted</th><th>Tavily</th><th>Gemini in / out</th><th>Cost ₹</th><th>Changed</th><th>Errors</th></tr></thead>
-          <tbody>{runs.map(r => (
-            <tr key={r.id}>
-              <td>{r.id}</td><td><span className="tag" title={TRIGGER_NOTE[r.trigger] || ''}>{r.trigger}</span><div className="small muted">{TRIGGER_NOTE[r.trigger]}</div></td><td className="small">{fmtDT(r.started_at)}</td>
-              <td><span className={`pill ${r.status === 'ok' ? 'p-reach' : r.status === 'error' ? 'p-flag' : 'p-unknown'}`}>{r.status}</span></td>
-              <td>{r.items_fetched}</td><td>{r.items_new}</td><td>{r.signals_counted}</td><td>{r.tavily_credits}</td>
-              <td className="small mono">{r.gemini_input_tokens.toLocaleString('en-IN')} / {r.gemini_output_tokens.toLocaleString('en-IN')}</td>
-              <td><div className="costbar"><i style={{ width: `${(r.cost_inr / max) * 100}%` }} /><b>{r.cost_inr.toFixed(2)}</b></div></td>
-              <td className="small">{(r.changes || []).length ? <details><summary>{r.changes.length} VCs</summary>{r.changes.map(c => <div key={c.vc_id}>{c.firm}: {c.from_score} → {c.to_score}</div>)}</details> : '0'}</td>
-              <td className="small">{(r.errors || []).length ? <details><summary>{r.errors.length}</summary>{r.errors.map((e, i) => <div key={i}>{e}</div>)}</details> : '0'}</td>
+      <div className="stats">
+        <div className="stat"><span className="muted small">VCs scanned</span><b className="mono">{data.vcs.length}</b></div>
+        <div className="stat"><span className="muted small">Items fetched</span><b className="mono">{r?.items_fetched ?? '-'}</b></div>
+        <div className="stat"><span className="muted small">Signals found</span><b className="mono">{r?.signals_counted ?? '-'}</b></div>
+        <div className="stat"><span className="muted small">Cost</span><b className="mono">₹{r ? r.cost_inr.toFixed(2) : '-'}</b></div>
+        <div className="stat"><span className="muted small">Tavily credits</span><b className="mono">{r?.tavily_credits ?? '-'}</b></div>
+      </div>
+      <div className={`card untouched ${ok ? '' : 'bad'}`}>
+        {ok ? <ShieldCheck size={22} aria-hidden /> : <AlertTriangle size={22} aria-hidden />}
+        <div>
+          <b>{ok ? 'Your data untouched' : 'Check needed'}</b>
+          <p>{ok ? 'Contact history, status and notes: unchanged by the pipeline ✓' : (v.error ? `Verify check failed: ${v.error}` : 'The database guard (trigger / write function) is missing. Code could write your columns.')}</p>
+          <p className="muted small">Database guard active · fingerprint <span className="mono">{String(v.hash_contact_history_personal_notes || '').slice(0, 12)}…</span> · checked {fmtDT(v.at)} · <a href="/api/verify" target="_blank" rel="noreferrer">raw check</a></p>
+        </div>
+      </div>
+      <section className="card">
+        <div className="sec-h"><h2>Data gaps</h2><span className="muted small">no item at all from any source in the last 60 days</span></div>
+        {data.gaps.length === 0 ? <p className="empty">Every VC had at least one item.</p> : (
+          <div className="gaps">{data.gaps.map(g => <button key={g.vc_id} className="chip" onClick={() => open(g.vc_id)}>{g.firm}</button>)}</div>
+        )}
+        <p className="muted small">Coverage is thin here: news search found nothing about these firms. Log what you see on LinkedIn yourself.</p>
+      </section>
+      <section className="card flush">
+        <div className="sec-h pad"><h2>Runs & cost</h2><span className="muted small">ids skip #1, #3, #5, #6 (build-time tests deleted); #11, #12 discarded with reasons</span></div>
+        <div className="tablewrap"><table className="ptable">
+          <thead><tr><th>#</th><th>Trigger</th><th>Started</th><th>Status</th><th>Fetched</th><th>Counted</th><th>Tavily</th><th>Gemini in / out</th><th>Cost ₹</th><th>Notes</th></tr></thead>
+          <tbody>{data.runs.map(x => (
+            <tr key={x.id}>
+              <td className="mono">{x.id}</td><td title={TRIGGER_NOTE[x.trigger] || ''}>{x.trigger}</td><td className="mono small nowrap">{fmtDT(x.started_at)}</td>
+              <td>{x.status === 'ok' ? <span className="tag">ok</span> : <span className="tag muted-tag">{x.status}</span>}</td>
+              <td className="mono">{x.items_fetched}</td><td className="mono">{x.signals_counted}</td><td className="mono">{x.tavily_credits}</td>
+              <td className="mono small nowrap">{x.gemini_input_tokens.toLocaleString('en-IN')} / {x.gemini_output_tokens.toLocaleString('en-IN')}</td>
+              <td className="mono">{x.cost_inr.toFixed(2)}</td>
+              <td className="small">{(x.errors || []).length ? <Clamp text={x.errors.join(' · ')} lines={1} className="muted" /> : <span className="muted">-</span>}</td>
             </tr>
           ))}</tbody>
         </table></div>
-      </div>
-    </>
+      </section>
+    </div>
   );
 }

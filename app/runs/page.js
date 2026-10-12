@@ -1,2 +1,2 @@
 import { redirect } from 'next/navigation';
-export default function Runs() { redirect('/?tab=runs'); }
+export default function Runs() { redirect('/?tab=report'); }

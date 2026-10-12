@@ -164,3 +164,13 @@ alter table vcs add column if not exists second_logistics_deal text;
 alter table vcs add column if not exists second_logistics_source_url text;
 alter table vcs add column if not exists watch_outs text;
 alter table vcs add column if not exists confidence text;
+
+-- ===== UI v2 (12 Oct 2026): Vikram's calendar notes. Not linked to vcs; written only by the notes routes. =====
+create table if not exists calendar_notes (
+  id bigserial primary key,
+  note_date date not null,
+  body text not null check (char_length(body) <= 2000),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+create index if not exists calendar_notes_date on calendar_notes (note_date);
