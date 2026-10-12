@@ -29,6 +29,7 @@ let credits = 0;
 const out = [];
 for (const c of cases) {
   const vcName = c.vc; const vc = vcs.find(v => v.firm === vcName);
+  if (!vc) { out.push({ id: c.id, vc: vcName, published: c.published, age_days: daysBetween(c.published, today), note: 'VC not in the current list (seed/vc-list.csv)' }); continue; }
   const url = normUrl(c.url);
   const row = { id: c.id, vc: vcName, published: c.published, age_days: daysBetween(c.published, today) };
   // Stage: stored by a live run?

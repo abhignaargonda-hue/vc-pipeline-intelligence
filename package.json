@@ -12,8 +12,7 @@
     "run-once": "node --env-file=.env.local scripts/run-once.mjs",
     "test-cases": "node --env-file=.env.local scripts/test-cases.mjs",
     "test-rubric": "node scripts/test-rubric.ts",
-    "trace": "node --env-file=.env.local scripts/trace-coverage.mjs",
-    "relabel": "node --env-file=.env.local scripts/relabel.mjs"
+    "trace": "node --env-file=.env.local scripts/trace-coverage.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.0.1",

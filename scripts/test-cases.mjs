@@ -8,7 +8,7 @@ import { rejectReason, scoreVc, band } from '../lib/score.js';
 import { buildMatchers, preMatch, normUrl } from '../lib/sources.js';
 
 const set = JSON.parse(readFileSync(new URL('../seed/signal-test-set.json', import.meta.url), 'utf8'));
-const vcsAll = parseCsv(readFileSync(new URL('../seed/vc-list.csv', import.meta.url), 'utf8')).map(r => ({ ...r, vc_group: r.group }));
+const vcsAll = parseCsv(readFileSync(new URL('../seed/vc-list-v1.csv', import.meta.url), 'utf8')).map(r => ({ ...r, vc_group: r.group }));
 const vcs = vcsAll.map(({ vc_id, firm, aliases, partner_name, guard_terms, vc_group, status }) => ({ vc_id, firm, aliases, partner_name, guard_terms, vc_group, status }));
 const vcIds = new Set(vcs.map(v => v.vc_id));
 const today = set.as_of;
@@ -54,15 +54,14 @@ for (const c of set.cases) {
 console.log(`\nCASES (as of ${today}; Gemini ${process.env.GEMINI_MODEL}; ${inputTokens} in / ${outputTokens} out tokens)`);
 console.table(rows);
 
-// Per-VC bands vs rubric section 6
-const expected = { VC21: [64, 'Reach out this week'], VC11: [55, 'Reach out this week'], VC13: [48, 'Warm'], VC41: [42, 'Warm'],
-  VC01: [35, 'Warm'], VC35: [24, 'Low priority'], VC06: [21, 'Low priority'], VC28: [19, 'Low priority'] };
-const bandRows = Object.entries(expected).map(([id, [es, eb]]) => {
+// Per-VC Rubric v4 scores from Gemini's labels (informational; npm run test-rubric checks the maths)
+const ids = [...new Set(accepted.map(s => s.vc_id))];
+const bandRows = ids.map(id => {
   const v = vcs.find(x => x.vc_id === id);
   const r = scoreVc(v, accepted.filter(s => s.vc_id === id), today);
-  return { vc: v.firm, exp_score: es, act_score: r.score, exp_band: eb, act_band: band(r.score).split(':')[0], meet: r.meet.map(m => `${m.event_name} ${m.event_start || ''}`).join('; '), pass: band(r.score).startsWith(eb) };
-});
-console.log('\nBANDS (rubric section 6, v2)');
+  return { vc: v.firm, v4_score: r.score, band: band(r.score).split(':')[0], meet: r.meet.map(m => `${m.event_name} ${m.event_start || ''}`).join('; ') };
+}).sort((a, b) => b.v4_score - a.v4_score);
+console.log('\nRUBRIC v4 SCORES FROM GEMINI LABELS');
 console.table(bandRows);
-const pc = rows.filter(r => r.pass).length, pb = bandRows.filter(r => r.pass).length;
-console.log(`\nCases: ${pc}/${rows.length} match expected · Bands: ${pb}/${bandRows.length} match expected`);
+const pc = rows.filter(r => r.pass).length;
+console.log(`\nCases: ${pc}/${rows.length} labels match expected (signal / type / relevance)`);

@@ -1,16 +1,14 @@
-# vc-list.csv: research notes (12 Oct 2026)
+# vc-list.csv: notes (current list, 12 Oct 2026)
 
-- 52 real Indian firms researched; 50 kept. Every value was taken from a page fetched on 12 Oct 2026. Unverifiable fields are left blank.
-- 43 rows have a partner currently listed on the firm's own team page (partner_verified_on_firm_site = yes).
-- 7 rows are firm-level only (partner blank) because the firm site blocks automated reading or has no team page:
-  Leo Capital, WEH Ventures, Better Capital, Venture Highway, Omnivore, Equentis Angel Fund, Riverwalk Holdings.
-  They are kept because each has real logistics deal evidence; signals are matched on the firm name.
-- Dropped: Huddle Ventures and Java Capital (team not verifiable and no logistics evidence).
-- Groups follow the evidence found, not a target split:
-  logistics_active 33 (a real logistics or supply-chain deal found), b2b_generalist 8 (fits B2B/early stage, no logistics deal found),
-  poor_fit 9 (consumer-only, gaming, or venture debt). Poor-fit rows are controls: they should score low or quiet.
-- Vikram's columns (last_contact_date, status, contact_history, personal_notes) are empty by design (D6).
-- Known checks before use: Accel partner title comes from a 2019 Inc42 article; Stellaris shows "Investor" not Partner;
-  Venture Catalysts founder spelled Rajan/Ranjan across sources; Equentis OORJAA article URL to be captured from alert feed.
-- Live test cases already inside the 30-day window: Avaana Capital led Drivn seed (22 Sep 2026); Vishesh Rajaram
-  (Speciale Invest) announced as TechSparks 2026 speaker (7 Oct 2026, event 13-15 Oct).
+- Source: Vikram's sheet "vc-list-50-logistics-seed" (Google Sheets), tab "50 VCs". 50 firms, each with a real, sourced
+  logistics / supply-chain deal AND evidence that it writes seed / pre-Series A cheques. Researched 12 Oct 2026 from live pages
+  (Inc42, YourStory, Entrackr, firm sites). Blank = could not be verified; nothing was guessed.
+- Columns kept as in the sheet: #, Firm, Type, Website, Logistics deal, Deal source, Second logistics deal, Second source,
+  Seed evidence (quote), Seed source, Partner, Title, Team page, Aliases, Watch-outs, Confidence.
+- Mapping into Neon `vcs`: vc_id = VC + "#" (VC01-VC50); vc_group = logistics_active for all 50 (the sheet's selection rule);
+  partner_verified_on_firm_site = yes when a partner is named (sheet summary: 37 verified); guard_terms (Tavily query):
+  reused from the first list for the 28 overlapping firms, otherwise derived from firm name + aliases + the Watch-outs exclusions.
+- Vikram's columns (last_contact_date, status, contact_history, personal_notes) are not in the sheet: empty by design.
+- 15+ firms overlap the first list; the first list is kept as `vc-list-v1.csv` (the 17-case test set was written against it).
+- The sheet's "Not included" tab explains left-out firms (e.g. Avaana, Antler, Speciale, WEH, Gemba: no logistics deal found).
+- Earlier notes on the first list are in git history (seed/vc-list-notes.md before 12 Oct 2026 v4).

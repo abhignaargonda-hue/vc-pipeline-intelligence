@@ -5,9 +5,10 @@ const BANDS = {
   reach: { label: 'Reach out this week', short: 'Reach out', color: 'var(--reach)', soft: 'var(--reach-soft)' },
   warm: { label: 'Warm: mention the signal', short: 'Warm', color: 'var(--warm)', soft: 'var(--warm-soft)' },
   low: { label: 'Low priority', short: 'Low', color: 'var(--low)', soft: 'var(--low-soft)' },
+  checkout: { label: 'Check out (older news, not scored)', short: 'Check out', color: 'var(--checkout)', soft: 'var(--checkout-soft)' },
   unknown: { label: 'No news found (unknown)', short: 'Unknown', color: 'var(--unknown)', soft: 'var(--unknown-soft)' },
 };
-const ORDER = ['reach', 'warm', 'low', 'unknown'];
+const ORDER = ['reach', 'warm', 'low', 'checkout', 'unknown'];
 const parked = v => ['Passed', 'Not now'].includes(v.my_status);
 const GROUP_RANK = { logistics_active: 0, b2b_generalist: 1, poor_fit: 2 };
 const WHO_CLASS = { 'my partner': 'p-reach', 'someone else at the firm': 'p-warm' };
@@ -131,7 +132,9 @@ function RunNow() {
 function Overview({ data, counts, go, open }) {
   const total = data.vcs.length;
   const active = data.vcs.filter(v => !parked(v));
-  const reach = active.filter(v => v.band === 'reach');
+  const reach = active.filter(v => v.band === 'reach').sort((a, b) => b.score - a.score);
+  const top5 = reach.slice(0, 5);
+  const checkouts = active.filter(v => v.band === 'checkout');
   const warm = active.filter(v => v.band === 'warm');
   const meet = data.vcs.flatMap(v => v.meet.map(m => ({ ...m, firm: v.firm, vc_id: v.vc_id })));
   const changes = data.changes || [];
@@ -149,7 +152,7 @@ function Overview({ data, counts, go, open }) {
       </div>
 
       <div className="card">
-        <div className="card-h"><h3>Band split</h3><span className="muted small">score = fit × timing · click a segment to filter</span></div>
+        <div className="card-h"><h3>Band split</h3><span className="muted small">Rubric v4 · click a segment to filter</span></div>
         <div className="splitbar">
           {ORDER.filter(b => counts[b]).map(b => (
             <button key={b} style={{ flex: counts[b], background: BANDS[b].color }} title={`${BANDS[b].label}: ${counts[b]}`} onClick={() => go('pipeline', b)}>
@@ -194,14 +197,19 @@ function Overview({ data, counts, go, open }) {
       <div className="grid2">
         <div className="stack">
           <div className="card">
-            <div className="card-h"><h3><span className="pill p-reach">Ready to talk</span> Reach out this week</h3></div>
-            {reach.length > 0 ? reach.map(v => <VcCard key={v.vc_id} v={v} open={open} />) : (
+            <div className="card-h"><h3><span className="pill p-reach">Ready to talk</span> This week's 5</h3><span className="muted small">top Reach-out VCs by score{reach.length > 5 ? ` · ${reach.length - 5} more in Pipeline` : ''}</span></div>
+            {top5.length > 0 ? top5.map((v, i) => <VcCard key={v.vc_id} v={v} open={open} rank={i + 1} />) : (
               <>
                 <p className="emptyline">No VC crossed 50 this run. These are the strongest warm leads.</p>
                 {warm.slice(0, 3).map(v => <VcCard key={v.vc_id} v={v} open={open} />)}
               </>
             )}
           </div>
+          {checkouts.length > 0 && <div className="card">
+            <div className="card-h"><h3><span className="pill p-checkout">Check out</span> Older news (31-60 days), not scored</h3><span className="muted small">{checkouts.length}</span></div>
+            {checkouts.slice(0, 6).map(v => <CheckoutLine key={v.vc_id} v={v} open={open} />)}
+            {checkouts.length > 6 && <p className="small muted">+{checkouts.length - 6} more in Pipeline → Check out</p>}
+          </div>}
           <div className="card">
             <div className="card-h"><h3><span className="pill p-warm">Warm</span> Mention the signal if you contact them</h3><span className="muted small">{warm.length}</span></div>
             {warm.length === 0 ? <p className="muted">None.</p> : warm.slice(reach.length ? 0 : 3).map(v => <VcCard key={v.vc_id} v={v} open={open} compact />)}
@@ -221,10 +229,23 @@ function WhoTag({ item }) {
   return <span className={`pill ${WHO_CLASS[item.who] || 'p-unknown'}`} title={item.person || ''}>{item.who === 'my partner' ? `your partner${item.person ? `: ${item.person}` : ''}` : item.who === 'someone else at the firm' ? `someone else: ${item.person}` : 'firm-level'}</span>;
 }
 
-function VcCard({ v, open, compact }) {
+function CheckoutLine({ v, open }) {
+  const c = v.checkout;
+  return (
+    <div className="vccard b-checkout" onClick={() => open(v.vc_id)}>
+      <div className="vccard-body">
+        <div className="row"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'no tracked partner'}</span></div>
+        {c && <div className="small">{c.summary} <span className="muted">· {fmt(c.published_at)} · </span><a href={c.url} target="_blank" onClick={e => e.stopPropagation()}>{host(c.url)} ↗</a></div>}
+      </div>
+    </div>
+  );
+}
+
+function VcCard({ v, open, compact, rank }) {
   const best = v.items.find(i => i.points > 0);
   return (
     <div className={`vccard b-${v.band}`} onClick={() => open(v.vc_id)}>
+      {rank && <span className="rank">{rank}</span>}
       <ScoreRing score={v.score} band={v.band} size={compact ? 40 : 52} />
       <div className="vccard-body">
         <div className="row"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'no tracked partner'}</span>
@@ -232,7 +253,7 @@ function VcCard({ v, open, compact }) {
           {v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</div>
         {best && <div className="small">{best.summary}</div>}
         {best && <div className="small muted row" style={{ gap: 4 }}><span className="tag">{best.type}</span>{best.stage !== 'unknown' && <span className="tag t-rel">{best.stage}</span>}<WhoTag item={best} />{fmt(best.published_at)}{best.copies > 1 ? ` · ${best.copies} reports` : ''}</div>}
-        {!compact && <div className="small muted">Fit: {v.fit.why}</div>}
+        {!compact && v.logistics_evidence && <div className="small muted">Logistics deal on record: {v.logistics_evidence}</div>}
       </div>
     </div>
   );
@@ -253,15 +274,15 @@ function ScoreRing({ score, band, size = 48 }) {
 function Rings({ vcs, open }) {
   const [hover, setHover] = useState(null);
   const S = 420, C = S / 2;
-  const zones = { reach: [26, 70], warm: [82, 122], low: [134, 168], unknown: [180, 202] };
+  const zones = { reach: [26, 62], warm: [72, 104], low: [114, 140], checkout: [150, 174], unknown: [184, 204] };
   const dots = [];
   ORDER.forEach(b => {
     const list = vcs.filter(v => v.band === b);
     list.forEach((v, i) => {
       const [r0, r1] = zones[b];
-      const frac = b === 'unknown' ? 0.5 : b === 'reach' ? 1 - (v.score - 50) / 50 : b === 'warm' ? 1 - (v.score - 25) / 25 : 1 - (v.score - 1) / 24;
+      const frac = b === 'unknown' || b === 'checkout' ? 0.5 : b === 'reach' ? 1 - (v.score - 60) / 40 : b === 'warm' ? 1 - (v.score - 25) / 35 : 1 - (v.score - 1) / 24;
       const r = r0 + (r1 - r0) * Math.max(0, Math.min(1, frac));
-      const a = (i / Math.max(1, list.length)) * 2 * Math.PI + (b === 'unknown' ? 0.2 : b === 'low' ? 0.9 : b === 'warm' ? 0.4 : -1.2);
+      const a = (i / Math.max(1, list.length)) * 2 * Math.PI + (b === 'unknown' ? 0.2 : b === 'checkout' ? 1.4 : b === 'low' ? 0.9 : b === 'warm' ? 0.4 : -1.2);
       dots.push({ v, x: C + r * Math.cos(a), y: C + r * Math.sin(a), b });
     });
   });
@@ -275,8 +296,8 @@ function Rings({ vcs, open }) {
         {dots.map(({ v, x, y, b }) => (
           <g key={v.vc_id} className="ringdot" onClick={() => open(v.vc_id)} onMouseEnter={() => setHover({ v, x, y })} onMouseLeave={() => setHover(null)}>
             <circle cx={x} cy={y} r="13" fill="transparent" />
-            <circle cx={x} cy={y} r={b === 'unknown' ? 4.5 : 7} fill={BANDS[b].color} stroke={parked(v) ? 'var(--fg)' : '#fff'} strokeWidth="1.5" />
-            {b !== 'unknown' && b !== 'low' && <text x={x} y={y - 11} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--fg)">{v.firm.split(' ')[0]}</text>}
+            <circle cx={x} cy={y} r={b === 'unknown' || b === 'checkout' ? 4.5 : 7} fill={BANDS[b].color} stroke={parked(v) ? 'var(--fg)' : '#fff'} strokeWidth="1.5" />
+            {(b === 'reach' || b === 'warm') && <text x={x} y={y - 11} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--fg)">{v.firm.split(' ')[0]}</text>}
           </g>
         ))}
       </svg>
@@ -316,6 +337,7 @@ function Pipeline({ vcs, band, setBand, counts, open }) {
           <label className="search"><Icon d={I.search} size={15} /><input placeholder="Search VC, partner, signal, status" value={q} onChange={e => setQ(e.target.value)} /></label>
         </div>
       </div>
+      {band === 'checkout' && <p className="small muted">Check out = nothing scored in the last 30 days, but a qualifying item from 31-60 days ago exists. It is shown for context and never scored or moved into another band.</p>}
       {band === 'unknown' && <p className="small muted">Unknown = our tracked sources (news search, Google Alerts, Inc42/YourStory, 4 Substacks) found nothing in 30 days. It is not proof the fund is inactive: LinkedIn and most firm blogs are not machine-readable. Use Log a signal for what you see yourself. Sorted by fit.</p>}
       <div className="wrap">
         <table className="tbl">
@@ -328,7 +350,9 @@ function Pipeline({ vcs, band, setBand, counts, open }) {
                   <td><b>{v.firm}</b><div className="small muted">{v.partner_name || 'no tracked partner'} · {v.vc_group}</div></td>
                   <td><ScoreRing score={v.score} band={v.band} size={36} /></td>
                   <td><span className={`pill p-${v.band}`}>{BANDS[v.band].short}</span>{v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</td>
-                  <td className="hide-sm small">{best ? <>{best.summary} <span className="muted">· {fmt(best.published_at)}</span> <WhoTag item={best} /></> : <span className="muted">No news found in tracked sources</span>}</td>
+                  <td className="hide-sm small">{best ? <>{best.summary} <span className="muted">· {fmt(best.published_at)}</span> <WhoTag item={best} /></>
+                    : v.checkout ? <><span className="pill p-checkout">older</span>{v.checkout.summary} <span className="muted">· {fmt(v.checkout.published_at)}</span> <a href={v.checkout.url} target="_blank" onClick={e => e.stopPropagation()}>↗</a></>
+                    : <span className="muted">No news found in tracked sources</span>}</td>
                   <td className="hide-sm small">{v.my_status ? <span className="pill p-low">{v.my_status}</span> : <span className="muted">set in panel →</span>}</td>
                 </tr>
               );
@@ -375,7 +399,6 @@ function Detail({ vc, onClose, statuses }) {
   }, [onClose]);
   const counted = vc.items.filter(i => i.points > 0);
   const best = counted[0];
-  const others = counted.slice(1).reduce((a, i) => a + i.points, 0);
   return (
     <div className="overlay" onClick={onClose}>
       <aside className="drawer" onClick={e => e.stopPropagation()}>
@@ -383,7 +406,7 @@ function Detail({ vc, onClose, statuses }) {
           <ScoreRing score={vc.score} band={vc.band} size={60} />
           <div style={{ flex: 1 }}>
             <h2>{vc.firm}</h2>
-            <div className="small muted">{vc.partner_name ? `${vc.partner_name}, ${vc.partner_title || ''}` : 'No tracked partner (firm-level)'} · {vc.vc_group} · {vc.stage_fit}
+            <div className="small muted">{vc.partner_name ? `${vc.partner_name}, ${vc.partner_title || ''}` : 'No tracked partner (firm-level)'} · {vc.vc_type || vc.vc_group}{vc.confidence ? ` · ${vc.confidence} confidence` : ''}
               {vc.partner_verified_on_firm_site && vc.partner_verified_on_firm_site !== 'yes' && <span className="pill p-warm">verify partner</span>}
               {vc.website && <> · <a href={`https://${vc.website}`} target="_blank">{vc.website}</a></>}</div>
             <span className={`pill p-${vc.band}`}>{BANDS[vc.band].label}</span>{vc.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}
@@ -402,26 +425,27 @@ function Detail({ vc, onClose, statuses }) {
         </section>
 
         <section>
-          <h4>How the score was worked out (fit × timing)</h4>
-          {vc.items.length === 0 ? <p className="muted small">No news found in tracked sources in the last 30 days, so the score is 0 (unknown, not inactive).</p> : (
+          <h4>How the score was worked out (Rubric v4)</h4>
+          {vc.checkout && <div className="checkoutbox small"><span className="pill p-checkout">Check out</span> Older news (not scored): {vc.checkout.summary} · {fmt(vc.checkout.published_at)} · <a href={vc.checkout.url} target="_blank">{host(vc.checkout.url)} ↗</a></div>}
+          {vc.items.length === 0 ? <p className="muted small">No signal in the last 30 days, so the score is 0{vc.checkout ? ' (Check out band)' : ' (no news found: unknown, not inactive)'}.</p> : (
             <>
               <div className="wrap"><table className="tbl small">
-                <thead><tr><th>Signal</th><th>Base</th><th>× Rel</th><th>× Recency</th><th>× Stage / role / person</th><th>= Pts</th></tr></thead>
+                <thead><tr><th>Signal</th><th>What ×0.50</th><th>Logistics ×0.30</th><th>Fresh ×0.15</th><th>Led ×0.05</th><th>= Pts</th></tr></thead>
                 <tbody>{vc.items.map((i, k) => (
                   <tr key={k} className={i.best ? 'bestrow' : ''}>
                     <td><span className="tag">{i.type}</span>{TYPE_NAMES[i.type] || ''}{i.best && <span className="pill p-reach">best</span>}{i.copies > 1 && <span className="muted"> · {i.copies} reports, counted once</span>}
                       {i.note && <div className="muted">{i.note}</div>}</td>
-                    <td className="mono">{i.base}</td><td className="mono">{i.relMult} <span className="muted">({i.manual ? 'core, logged' : i.rel})</span></td>
-                    <td className="mono">{i.recMult} <span className="muted">({i.days} d)</span></td>
-                    <td className="mono">{i.stageMult} × {i.roleMult} × {i.personMult} <span className="muted">({i.stage}{i.deal_role && i.deal_role !== 'unknown' ? `, ${i.deal_role}` : ''})</span></td>
+                    <td className="mono">{i.what} <span className="muted">→ {(i.what * 0.5).toFixed(1)}</span></td>
+                    <td className="mono">{i.logistics} <span className="muted">({i.manual ? 'core, logged' : i.rel}) → {(i.logistics * 0.3).toFixed(1)}</span></td>
+                    <td className="mono">{i.fresh} <span className="muted">({i.days} d) → {(i.fresh * 0.15).toFixed(1)}</span></td>
+                    <td className="mono">{i.led} <span className="muted">{i.type === 'S1' ? `(${i.deal_role || 'unknown'})` : '(not a deal)'} → {(i.led * 0.05).toFixed(1)}</span></td>
                     <td className="mono"><b>{i.points}</b></td>
                   </tr>
                 ))}</tbody>
               </table></div>
               <p className="formula mono small">
-                {best ? <>timing = best {best.points.toFixed(1)} + 0.3 × {others.toFixed(1)} = {vc.timing}<br />
-                  × fit {vc.fit.mult} ({vc.fit.why}){vc.bonus ? ' + 10 (logistics deal on record)' : ''} = {vc.raw}
-                  {vc.fit.cap != null ? ` → capped at ${vc.fit.cap}` : ''} → <b>{vc.score}</b></> : 'No scoring signal (only context or flag items).'}
+                {best ? <>best {best.points.toFixed(1)} + 5 × {vc.extra} extra signal{vc.extra === 1 ? '' : 's'} (max +15) = {vc.raw}
+                  {vc.cap < 100 ? ` → capped at ${vc.cap} (poor fit)` : ''} → <b>{vc.score}</b> · {BANDS[vc.band].label}</> : 'Only skipped or flag items (0 points).'}
               </p>
               {vc.recomputed !== vc.score && <p className="small reason">Stored score {vc.score}; recomputing now gives {vc.recomputed}. It updates on the next run.</p>}
             </>
@@ -441,8 +465,11 @@ function Detail({ vc, onClose, statuses }) {
           ))}
         </section>
 
-        {vc.thesis_quote && <section><h4>Thesis</h4><p className="small">"{vc.thesis_quote}" {vc.thesis_url && <a href={vc.thesis_url} target="_blank">source ↗</a>}</p></section>}
-        {vc.logistics_evidence && <section><h4>Logistics deal on record (warm-path lead)</h4><p className="small">{vc.logistics_evidence} {vc.logistics_source_url && <a href={vc.logistics_source_url} target="_blank">source ↗</a>}</p></section>}
+        {vc.thesis_quote && <section><h4>Seed evidence</h4><p className="small">"{vc.thesis_quote}" {vc.thesis_url && <a href={vc.thesis_url} target="_blank">source ↗</a>}</p></section>}
+        {vc.logistics_evidence && <section><h4>Logistics deals on record (warm-path lead)</h4>
+          <p className="small">{vc.logistics_evidence} {vc.logistics_source_url && <a href={vc.logistics_source_url} target="_blank">source ↗</a>}</p>
+          {vc.second_logistics_deal && <p className="small">{vc.second_logistics_deal} {vc.second_logistics_source_url && <a href={vc.second_logistics_source_url} target="_blank">source ↗</a>}</p>}</section>}
+        {vc.watch_outs && <section><h4>Watch-outs (research)</h4><p className="small">{vc.watch_outs}</p></section>}
 
         <section className="readonly">
           <h4>Your original columns <span className="pill p-unknown">read-only</span></h4>

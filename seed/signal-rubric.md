@@ -83,3 +83,31 @@ v2 ranked VCs by "did a deal recently". v3 ranks by "would they do MY deal, and 
   Passed / Not now: action becomes "do not re-pitch" / "parked" and the VC leaves the reach-out and warm lists.
 - **0 = "No news found (unknown)"**, not "quiet" or "inactive": the tracked sources found nothing.
 - v2 maths (sections 2-4) is still in code (`scoreVc(..., { version: 'v2' })`) and `npm run test-rubric` checks it against section 6.
+
+## 8. Rubric v4 (current, 12 Oct 2026) - replaces sections 3-4 and 7 for scoring; those stay as history
+**Per signal**: points = 0.50 x What + 0.30 x Logistics + 0.15 x Fresh + 0.05 x Led
+- What: S1 invested 70; S5 new early-stage fund 60 (a fund stated as growth/Series B+ = 20); S2 / S3 / S4a 35; S4b / S6 / S7 follow-on 20;
+  IPO / exit / secondary / debt 0 (skipped). N1 / N2 are flags only.
+- Logistics (Gemini relevance): core 100, adjacent 40, general 10. Manual (logged) signals = core.
+- Fresh: 0-7 days 100, 8-14 days 70, 15-30 days 40.
+- Led: S1 led / co-led 100, participated / unknown 60; non-investment signals 100.
+
+**VC score** = best signal + 5 per extra scoring signal (max +15), rounded, capped at 100. `poor_fit` group capped at 24.
+Removed from v3: deal-stage multiplier, person multiplier, fit multiplier, +10 logistics bonus. "Your partner / someone else" stays as a card label only.
+Duplicates (same VC + type + subject) still count once, dated by the earliest report. Hard filters (section 2) unchanged; 30-day rule for scoring.
+
+**Bands**
+| Score | Band |
+|---|---|
+| 60-100 | Reach out this week |
+| 25-59 | Warm: mention the signal if you contact them |
+| 1-24 | Low priority |
+| 0, with a qualifying item 31-60 days old | Check out: newest such item (date, one line, link). Never scored, never moves to another band |
+| 0, nothing found | No news found (unknown, not inactive) |
+
+A "qualifying" check-out item passes every hard filter except the 30-day rule (tracked VC, confirmed, a signal type, relevance not
+not_relevant). It is stored with rejected_reason `older than 30 days (check out)`.
+
+**Fetching** widened to 60 days: one basic Tavily search per VC with explicit start_date / end_date (Tavily's `days=60` returned
+months-old items and placeholder dates in testing), RSS / alert items kept up to 60 days. Tavily items stamped
+`<today-30> 17:00:00 GMT` are Tavily placeholders for undated pages and are treated as having no date.

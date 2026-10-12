@@ -25,3 +25,26 @@
 
 ## Components map
 No new outputs. One new store (`vc_status`, written only by Vikram from the dashboard) and one internal table (`run_scores` snapshots). The map's Neon box should list them; the "Notes + status: his only" rule is unchanged (vcs columns untouched).
+
+# v4 (12 Oct 2026): new VC list + Rubric v4
+
+## New VC list
+- `seed/vc-list.csv` now holds the 50 VCs from Vikram's sheet "vc-list-50-logistics-seed". The first list is kept as `seed/vc-list-v1.csv`.
+- Neon: old rows, their signals and score snapshots removed (Vikram's columns were empty in all 50 rows; vc_status was empty); runs history kept.
+- Not in the new list (so not scored any more): Avaana, Antler, Gemba, WEH, Speciale, Unicorn India, Stride, Arkam and others (sheet tab "Not included").
+
+## Rubric v4 (signal-rubric.md section 8)
+- Per signal 0.50 What + 0.30 Logistics + 0.15 Fresh + 0.05 Led; VC = best + 5 per extra (max +15). Removed: stage, person, fit multipliers and +10 bonus.
+- New band **Check out**: score 0 but a qualifying 31-60 day item exists; shown with date, one line and link; never scored.
+- `npm run test-rubric` checks lib/score.js against an independent reference of the v4 formula on T01-T17 (passes).
+
+## Fetching: what broke and how it was fixed
+| Problem | Evidence | Fix |
+|---|---|---|
+| Tavily `days=60` does not hold the window | For "IvyCap Ventures" it returned only Apr-Jun 2026 items and lost the 30 Sep Blitz deal; for Nexus it returned Dec 2025 items | Use `start_date`/`end_date` (all results inside the 60 days, Blitz found). Run #11 discarded |
+| Placeholder dates | 108 Tavily items stamped "12 Sep 2026 17:00:00 GMT" (today-30), e.g. a Beenext story VCCircle dated 24 Aug | Treat that stamp as no date (30-day rule rejects). Run #12 discarded |
+
+## Dashboard
+- 5th KPI tile, band-bar segment, Pipeline chip and proximity ring for Check out; Check out card on Overview.
+- Overview "This week's 5" = top 5 Reach-out VCs by score (ranked).
+- VC panel: four weighted parts per signal (What x0.50, Logistics x0.30, Fresh x0.15, Led x0.05) and best + 5 x extras; second logistics deal, watch-outs, seed evidence.

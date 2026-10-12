@@ -13,7 +13,7 @@ Note: the statement says "Supabase table"; we use Neon (also Postgres). Same tab
 
 ## Seed files (read these first, they are the source of truth)
 - seed/company-profile.md   facts about Vikram's company, relevance terms, 10 category peers (N1 check)
-- seed/vc-list.csv          50 REAL VCs. Vikram's columns (last_contact_date, status, contact_history, personal_notes) are EMPTY by design
+- seed/vc-list.csv          50 REAL VCs from Vikram's sheet "vc-list-50-logistics-seed" (v4 list). seed/vc-list-v1.csv = first list (test set). Vikram's columns are EMPTY by design
 - seed/source-registry.md   every live source: 9 Google Alert Atom feeds, Inc42/YourStory RSS, Substack feeds, Tavily per-VC search, manual box
 - seed/signal-rubric.md     v2 rubric: what Gemini labels, hard filters, points, multipliers, bands, wording, "never" rules
 - seed/signal-test-set.json 17 real cases (10 signals, 7 rejections) with expected bands
@@ -47,3 +47,12 @@ Vercel cron Mon + Thu 6:30am IST = "0 1 * * 1,4" (UTC).
 - Scheduled cron skips if a full run succeeded in the last 6 hours.
 - Scripts: test-rubric (v2 maths vs rubric section 6), trace (coverage trace of T01-T10), relabel (one-off v3 relabel of stored live signals).
 - Never insert test-set items into live tables.
+
+## v4 (current) - 12 Oct 2026
+- VC list replaced by Vikram's sheet (seed/vc-list.csv, notes in seed/vc-list-notes.md). Old list kept as seed/vc-list-v1.csv.
+- Scoring = Rubric v4 (seed/signal-rubric.md section 8): per signal 0.50 What + 0.30 Logistics + 0.15 Fresh + 0.05 Led;
+  VC = best + 5 per extra (max +15), cap 100, poor_fit cap 24. Bands: Reach out >= 60, Warm 25-59, Low 1-24,
+  Check out (0 + a qualifying 31-60 day item, never scored), No news found (unknown).
+- Fetch window 60 days: Tavily with start_date/end_date (not `days`), still 1 basic search per VC; Tavily placeholder dates
+  (<today-30> 17:00:00 GMT) are treated as undated.
+- Dashboard: 5 KPI tiles / band-bar segments incl. Check out, "This week's 5", four-part score maths in the VC panel.

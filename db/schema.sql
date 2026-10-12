@@ -157,3 +157,10 @@ create table if not exists run_scores (
   summary text,
   primary key (run_id, vc_id)
 );
+
+-- ===== v4 (12 Oct 2026): new 50-VC list (seed/vc-list.csv from Vikram's sheet "vc-list-50-logistics-seed") =====
+alter table vcs add column if not exists vc_type text;
+alter table vcs add column if not exists second_logistics_deal text;
+alter table vcs add column if not exists second_logistics_source_url text;
+alter table vcs add column if not exists watch_outs text;
+alter table vcs add column if not exists confidence text;

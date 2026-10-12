@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
-import { scoreVc, groupEvents, personMatch, STATUSES } from '@/lib/score';
-import { todayIST, diffSnapshots, bandKey } from '@/lib/pipeline';
+import { scoreVc, groupEvents, personMatch, STATUSES, bandKey, CHECK_OUT_REASON } from '@/lib/score';
+import { todayIST, diffSnapshots } from '@/lib/pipeline';
 import Dashboard from './Dashboard';
 
 export const dynamic = 'force-dynamic';
@@ -20,10 +20,11 @@ export default async function Page({ searchParams }) {
   const sp = await searchParams;
   const sql = db();
   const today = todayIST();
-  const [vcRows, accepted, feed, runs, statusRows, snap] = await Promise.all([
+  const [vcRows, accepted, feed, runs, statusRows, checkoutRows, snap] = await Promise.all([
     sql`select vc_id, firm, vc_group, stage_fit, partner_name, partner_title, website, status, last_contact_date::text as last_contact_date,
           contact_history, personal_notes, last_signal_date::text as last_signal_date, signal_summary, follow_up_score,
-          recommended_action, logistics_evidence, logistics_source_url, thesis_quote, thesis_url, partner_verified_on_firm_site
+          recommended_action, logistics_evidence, logistics_source_url, thesis_quote, thesis_url, partner_verified_on_firm_site,
+          vc_type, second_logistics_deal, second_logistics_source_url, watch_outs, confidence, team_page_url
         from vcs order by follow_up_score desc, firm`,
     sql`select vc_id, url, title, source, published_at::text as published_at, type, relevance, confirmed, category_peer,
           event_name, event_start::text as event_start, event_end::text as event_end, event_key, summary, manual,
@@ -38,6 +39,9 @@ export default async function Page({ searchParams }) {
           tavily_credits, gemini_input_tokens, gemini_output_tokens, cost_inr, changes, errors, source_counts
         from runs order by id desc limit 80`,
     sql`select vc_id, status, note, created_at from vc_status order by created_at desc`,
+    sql`select vc_id, url, source, published_at::text as published_at, type, relevance, summary from signals
+        where rejected_reason = ${CHECK_OUT_REASON} and vc_id is not null
+          and published_at < (${today}::date - 30) and published_at >= (${today}::date - 60)`,
     sql`select max(run_id) as id from run_scores`,
   ]);
   const statusOf = {}, statusHist = {};
@@ -48,22 +52,23 @@ export default async function Page({ searchParams }) {
 
   const vcs = vcRows.map(v => {
     const st = statusOf[v.vc_id]?.status || v.status || '';
-    const r = scoreVc(v, accepted.filter(s => s.vc_id === v.vc_id), today, { status: st });
+    const r = scoreVc(v, accepted.filter(s => s.vc_id === v.vc_id), today, { status: st, checkout: checkoutRows.filter(s => s.vc_id === v.vc_id) });
     return {
       ...v,
       // One number everywhere: the score stored in the pipeline table (written by the same scoring code).
       score: v.follow_up_score,
       recomputed: r.score,
-      band: bandKey(v.follow_up_score),
+      band: bandKey(v.follow_up_score, v.recommended_action),
+      checkout: r.checkout ? { url: r.checkout.url, summary: r.checkout.summary, published_at: r.checkout.published_at, source: r.checkout.source, type: r.checkout.type } : null,
       my_status: st, my_status_note: statusOf[v.vc_id]?.note || null, status_history: statusHist[v.vc_id] || [],
       flags: r.flags,
       meet: r.meet.map(m => ({ event_name: m.event_name, event_city: m.event_city, event_country: m.event_country, event_start: m.event_start, event_end: m.event_end, url: m.url })),
-      fit: r.fit, bonus: r.bonus, timing: Math.round(r.timing * 10) / 10, raw: Math.round(r.raw * 10) / 10,
+      bonus: r.bonus, extra: r.extra, cap: r.cap, raw: Math.round(r.raw * 10) / 10,
       items: r.items.map((s, idx) => ({
         type: s.type, relevance: s.relevance, manual: s.manual, url: s.url, summary: s.summary, source: s.source,
         published_at: s.published_at, points: Math.round(s.points * 10) / 10, best: idx === 0 && s.points > 0,
-        base: s.base, rel: s.rel, relMult: s.relMult, days: s.days, recMult: s.recMult, stage: s.stage, stageMult: s.stageMult,
-        roleMult: s.roleMult, personMult: s.personMult, deal_role: s.deal_role, note: s.note, who: s.who, person: s.person,
+        what: s.what, logistics: s.logistics, fresh: s.fresh, led: s.led, rel: s.rel, days: s.days, stage: s.stage,
+        deal_role: s.deal_role, note: s.note, who: s.who, person: s.person,
         copies: s.copies, reports: s.reports, flags: s.flags, category_peer: s.category_peer,
       })),
     };

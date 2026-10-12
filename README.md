@@ -78,7 +78,7 @@ An interactive single page with a sidebar (Overview, Pipeline, Calendar, Signals
 - **Signals:** a feed of counted and rejected items (with the reason) and the Log-a-signal form. The form warns when a date is outside 30 days.
 - **Runs & cost:** each run's items, Tavily credits, Gemini tokens and cost in ₹.
 
-**Scoring v3 (fit x timing)** and the other review fixes: see `CHANGES_v2.md` and `seed/signal-rubric.md` section 7.
+**Scoring is Rubric v4** (`seed/signal-rubric.md` section 8) on the VC list from Vikram's sheet (`seed/vc-list.csv`). History of every change: `CHANGES_v2.md`.
 
 ## Routes
 | Route | |

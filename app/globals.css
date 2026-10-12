@@ -173,3 +173,13 @@ details summary { cursor: pointer; color: var(--accent); }
 .parkedrow { opacity: .6; }
 .rejected-list { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
 .sig { color: var(--fg); }
+:root { --checkout: #7c3aed; --checkout-soft: #f5f3ff; }
+.kpis { grid-template-columns: repeat(5, 1fr); }
+.k-checkout .dot { background: var(--checkout); } .k-checkout b { color: var(--checkout); }
+.p-checkout { background: var(--checkout-soft); color: var(--checkout); border: 1px solid #ddd6fe; }
+.c-checkout i { background: var(--checkout); }
+.vccard.b-checkout { border-left-color: var(--checkout); }
+.checkoutbox { background: var(--checkout-soft); border: 1px solid #ddd6fe; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.rank { width: 22px; height: 22px; border-radius: 50%; background: var(--reach); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; flex: none; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px) { .kpis { grid-template-columns: 1fr 1fr; } }
