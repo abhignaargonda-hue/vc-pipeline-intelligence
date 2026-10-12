@@ -128,7 +128,7 @@ export default function Dashboard({ data, initialTab }) {
         </header>
         <div className="content">
           {tab === 'today' && <Today data={data} open={open} go={go} toast={toast} />}
-          {tab === 'pipeline' && <Pipeline data={data} band={pipeBand} setBand={setPipeBand} open={open} searchRef={searchRef} />}
+          {tab === 'pipeline' && <Pipeline data={data} band={pipeBand} setBand={setPipeBand} open={open} searchRef={searchRef} toast={toast} />}
           {tab === 'changes' && <Changes data={data} open={open} />}
           {tab === 'calendar' && <Calendar data={data} open={open} go={go} notes={notes} setNotes={setNotes} toast={toast} />}
           {tab === 'signals' && <Signals data={data} open={open} toast={toast} />}
@@ -176,6 +176,8 @@ function Today({ data, open, go, toast }) {
         {data.lastRun && <span className="muted small"> · from run #{data.lastRun.id}, {fmtDT(data.lastRun.finished_at)}</span>}
       </section>
 
+      <PriorityGrid vcs={active} open={open} />
+
       <section aria-label="VCs by band">
         <div className="bandrow">
           {ORDER.map(b => (
@@ -207,6 +209,29 @@ function Today({ data, open, go, toast }) {
         )}
       </section>
     </div>
+  );
+}
+
+// Top 9 by score in one box: #1 big (2x2); Reach out = blue gradient, Warm = light blue, the rest white.
+function PriorityGrid({ vcs, open }) {
+  const top = [...vcs].filter(v => v.score > 0).sort((a, b) => b.score - a.score).slice(0, 9);
+  if (!top.length) return null;
+  return (
+    <section className="card prio" aria-label="Priority board">
+      <div className="sec-h"><h2>Priority board</h2><span className="muted small">top {top.length} by score · dark = ready to reach out, light = warm, white = lower</span></div>
+      <div className="prio-grid">
+        {top.map((v, i) => (
+          <button key={v.vc_id} className={`prio-tile pt-${v.band === 'reach' ? 'hi' : v.band === 'warm' ? 'mid' : 'lo'} ${i === 0 ? 'big' : ''}`} onClick={() => open(v.vc_id)}>
+            <span className="pt-top"><span className="mono pt-rank">#{i + 1}</span><span className="mono pt-score">{v.score}</span></span>
+            <b className="pt-firm">{v.firm}</b>
+            <span className="pt-partner">{v.partner_name || 'no tracked partner'}</span>
+            <Clamp text={v.what_line || BANDS[v.band].long} lines={i === 0 ? 2 : 1} className="pt-what" />
+            {i === 0 && v.items.find(x => x.best) && <Clamp text={v.items.find(x => x.best).summary} lines={3} className="pt-sum" />}
+            <span className="pt-band">{BANDS[v.band].long}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -262,7 +287,7 @@ const COLS = [
   { k: 'firm', label: 'Firm', group: 'mine', get: v => v.firm },
   { k: 'partner', label: 'Partner', group: 'mine', get: v => v.partner_name || '' },
   { k: 'thesis', label: 'Thesis', group: 'mine', get: v => v.thesis_quote || '' },
-  { k: 'status', label: 'Status', group: 'mine', get: v => v.status || '' },
+  { k: 'status', label: 'Status', group: 'mine', get: v => v.my_status || v.status || '' },
   { k: 'contact', label: 'Last contact', group: 'mine', get: v => v.last_contact_date || '' },
   { k: 'notes', label: 'My notes', group: 'mine', get: v => v.personal_notes || '' },
   { k: 'lsd', label: 'Last signal date', group: 'sys', get: v => v.last_signal_date || '' },
@@ -271,7 +296,25 @@ const COLS = [
   { k: 'action', label: 'Recommended action', group: 'sys', get: v => v.recommended_action || '' },
 ];
 
-function Pipeline({ data, band, setBand, open, searchRef }) {
+function InlineStatus({ v, statuses, toast }) {
+  const [val, setVal] = useState(v.my_status && statuses.includes(v.my_status) ? v.my_status : '');
+  const [busy, setBusy] = useState(false);
+  async function save(s) {
+    const prev = val; setVal(s); setBusy(true);
+    const r = await fetch('/api/status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vc_id: v.vc_id, status: s }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    setBusy(false);
+    if (j.ok) toast(`${v.firm}: ${s}`); else { setVal(prev); toast(j.message || 'Could not save status', 'err'); }
+  }
+  return (
+    <select className={`status-sel ${val ? 'set' : ''}`} value={val} disabled={busy} onChange={e => save(e.target.value)} aria-label={`Status for ${v.firm}`}>
+      <option value="" disabled>Not contacted</option>
+      {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+    </select>
+  );
+}
+
+function Pipeline({ data, band, setBand, open, searchRef, toast }) {
   const [q, setQ] = useState('');
   const [flagsOnly, setFlagsOnly] = useState(false);
   const [sort, setSort] = useState({ k: 'score', dir: -1 });
@@ -306,7 +349,7 @@ function Pipeline({ data, band, setBand, open, searchRef }) {
         <table className={`ptable ${dense ? 'dense' : ''}`}>
           <thead>
             <tr className="grouprow">
-              <th colSpan={6} className="g-mine"><Lock size={13} aria-hidden /> Your columns (read-only)</th>
+              <th colSpan={6} className="g-mine"><Lock size={13} aria-hidden /> Your columns (read-only; status settable here)</th>
               <th colSpan={4} className="g-sys"><Sparkles size={13} aria-hidden /> Updated by the system (only these 4)</th>
             </tr>
             <tr>{COLS.map(th)}</tr>
@@ -317,7 +360,7 @@ function Pipeline({ data, band, setBand, open, searchRef }) {
                 <td className="g-mine"><b>{v.firm}</b>{v.flags.includes('Check for conflict') && <span className="chip-alert sm">conflict</span>}</td>
                 <td className="g-mine small">{v.partner_name || <span className="muted">-</span>}</td>
                 <td className="g-mine small"><Clamp text={v.thesis_quote} lines={2} /></td>
-                <td className="g-mine small">{v.status || <span className="muted">-</span>}{v.my_status && <div className="muted">set here: {v.my_status}</div>}</td>
+                <td className="g-mine small" onClick={e => e.stopPropagation()}><InlineStatus v={v} statuses={data.statuses} toast={toast} />{v.status && <div className="muted">Neon: {v.status}</div>}</td>
                 <td className="g-mine small mono">{v.last_contact_date ? fmt(v.last_contact_date) : <span className="muted">-</span>}</td>
                 <td className="g-mine small"><Clamp text={v.personal_notes || '-'} lines={2} className={v.personal_notes ? '' : 'muted'} /></td>
                 <td className="g-sys small mono">{v.last_signal_date ? fmt(v.last_signal_date) : '-'}</td>

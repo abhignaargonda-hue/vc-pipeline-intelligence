@@ -221,3 +221,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
   .hit-h { display: grid; grid-template-columns: 24px 1fr auto; } .hit-title { grid-column: 2 / 4; }
   .hit-h .band, .hit-h .chip-alert { grid-column: 2; justify-self: start; } .hit-h .score { grid-column: 3; grid-row: 2; }
 }
+/* Priority board (Today) */
+.prio-grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(112px, auto); gap: 8px; }
+.prio-tile { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 12px 14px; border-radius: var(--r); border: 1px solid var(--border); cursor: pointer; min-width: 0; transition: transform .12s, box-shadow .12s; }
+.prio-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(11, 31, 58, .12); }
+.prio-tile.big { grid-column: span 2; grid-row: span 2; padding: 20px; }
+.pt-hi { background: linear-gradient(135deg, var(--navy-700) 0%, var(--blue-600) 55%, var(--blue-400) 100%); color: #fff; border-color: var(--blue-600); }
+.pt-mid { background: var(--blue-100); color: var(--ink); }
+.pt-lo { background: #fff; color: var(--ink); }
+.pt-top { display: flex; justify-content: space-between; align-items: baseline; }
+.pt-rank { font-size: 11px; opacity: .75; } .pt-score { font-size: 20px; font-weight: 600; }
+.prio-tile.big .pt-score { font-size: 40px; line-height: 1; } .prio-tile.big .pt-firm { font-size: 22px; }
+.pt-firm { font-size: 15px; } .pt-partner, .pt-band { font-size: 11.5px; opacity: .8; }
+.pt-what { font-size: 12.5px; } .prio-tile.big .pt-what { font-size: 14px; font-weight: 600; } .pt-sum { font-size: 13px; opacity: .9; }
+.pt-band { margin-top: auto; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.pt-hi .pt-firm { color: #fff; } .pt-hi:focus-visible { outline-color: #fff; }
+.status-sel { font-size: 12px; padding: 4px 6px; max-width: 160px; } .status-sel.set { border-color: var(--blue-600); background: var(--blue-100); color: var(--navy-900); font-weight: 600; }
+@media (max-width: 768px) { .prio-grid { grid-template-columns: 1fr 1fr; } .prio-tile.big { grid-column: span 2; grid-row: span 1; } }
