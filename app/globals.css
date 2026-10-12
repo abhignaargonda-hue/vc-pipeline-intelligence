@@ -1,0 +1,25 @@
+:root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#e4e4e4; --soft:#f6f7f9; --hot:#b42318; --warm:#b54708; --low:#475467; --ok:#067647; --link:#1d4ed8; }
+* { box-sizing: border-box; }
+body { margin:0; font:14px/1.5 -apple-system, system-ui, Segoe UI, Roboto, sans-serif; color:var(--fg); background:var(--bg); }
+.top { display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; gap:8px; }
+.brand { font-weight:700; color:var(--fg); text-decoration:none; }
+nav a { margin-left:16px; color:var(--link); text-decoration:none; }
+main { max-width:1200px; margin:0 auto; padding:16px 20px 60px; }
+h1 { font-size:20px; margin:8px 0; } h2 { font-size:16px; margin:28px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+a { color:var(--link); }
+.muted { color:var(--muted); } .small { font-size:12px; }
+.row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.box { background:var(--soft); border:1px solid var(--line); border-radius:6px; padding:12px; }
+table { width:100%; border-collapse:collapse; } th, td { text-align:left; vertical-align:top; padding:6px 8px; border-bottom:1px solid var(--line); }
+th { font-size:12px; color:var(--muted); font-weight:600; background:var(--soft); }
+.score { font-weight:700; font-variant-numeric:tabular-nums; }
+.b-hot { color:var(--hot); } .b-warm { color:var(--warm); } .b-low { color:var(--low); } .b-none { color:var(--muted); }
+.tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:10px; background:#eef2ff; color:#3730a3; margin-right:4px; }
+.flag { background:#fef3f2; color:var(--hot); }
+button { font:inherit; padding:6px 14px; border:1px solid #1d4ed8; background:#1d4ed8; color:#fff; border-radius:5px; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+input, select { font:inherit; padding:6px 8px; border:1px solid #ccc; border-radius:5px; }
+form.log { display:grid; grid-template-columns: 1.2fr 2fr 140px 3fr auto; gap:8px; }
+@media (max-width: 800px) { form.log { grid-template-columns:1fr; } .hide-sm { display:none; } }
+.wrap { overflow-x:auto; }
+details summary { cursor:pointer; color:var(--link); font-size:12px; }

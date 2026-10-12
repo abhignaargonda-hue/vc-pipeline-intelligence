@@ -1,0 +1,250 @@
+{
+ "as_of": "2026-10-12",
+ "window_start": "2026-09-12",
+ "note": "Real articles only, each opened and dated by research on 12 Oct 2026. Labels (signal / not) follow the statement's rules; action bands follow signal-rubric.md v2. Manual-log-inside-30-days is tested live in Stage 11, not here.",
+ "cases": [
+  {
+   "id": "T01",
+   "vc": "IvyCap Ventures",
+   "title": "Blitz (quick-commerce fulfilment) raises Rs 28.7 Cr pre-Series B led by IvyCap",
+   "url": "https://www.cxodigitalpulse.com/?p=62901",
+   "published": "2026-09-30",
+   "expect": {
+    "signal": true,
+    "type": "S1",
+    "relevance": "core",
+    "action_band": "Reach out this week",
+    "why": "Led a fulfilment / last-mile deal 12 days ago"
+   }
+  },
+  {
+   "id": "T02",
+   "vc": "Avaana Capital",
+   "title": "Drivn raises ~$4.7M seed to electrify commercial fleets (Avaana)",
+   "url": "https://www.newskart.com/drivn-india-raises-4-7-million-seed-funding-to-electrify-commercial-fleets/",
+   "published": "2026-09-22",
+   "expect": {
+    "signal": true,
+    "type": "S1",
+    "relevance": "core",
+    "action_band": "Warm",
+    "why": "Fleet/trucking deal, 20 days old"
+   }
+  },
+  {
+   "id": "T03",
+   "vc": "3one4 Capital",
+   "title": "Gravity raises $15M co-led by 3one4 Capital and Info Edge Ventures (B2B interior-materials distribution)",
+   "url": "https://yourstory.com/2026/09/home-interiors-startup-gravity-raises-15-million-led-by-3one4-capital-and-info-edge-ventures",
+   "published": "2026-09-30",
+   "expect": {
+    "signal": true,
+    "type": "S1",
+    "relevance": "adjacent",
+    "action_band": "Reach out this week (with T05)",
+    "why": "B2B distribution deal; combined with T05 the VC crosses the top band"
+   }
+  },
+  {
+   "id": "T04",
+   "vc": "Info Edge Ventures",
+   "title": "Gravity raises $15M co-led by 3one4 Capital and Info Edge Ventures",
+   "url": "https://yourstory.com/2026/09/home-interiors-startup-gravity-raises-15-million-led-by-3one4-capital-and-info-edge-ventures",
+   "published": "2026-09-30",
+   "expect": {
+    "signal": true,
+    "type": "S1",
+    "relevance": "adjacent",
+    "action_band": "Warm",
+    "why": "Same article, second tracked VC: one item can signal two VCs"
+   }
+  },
+  {
+   "id": "T05",
+   "vc": "3one4 Capital",
+   "title": "3one4 Capital portfolio companies win at ET Supply Chain Awards 2026 (Unbox Robotics, Scimplify)",
+   "url": "https://www.3one4capital.com/blogs/3one4-capital-portfolio-companies-win-at-the-economic-times-supply-chain-awards-2026",
+   "published": "2026-09-16",
+   "expect": {
+    "signal": true,
+    "type": "S2",
+    "relevance": "core",
+    "action_band": "(adds to T03)",
+    "why": "Firm wrote about supply-chain portfolio wins"
+   }
+  },
+  {
+   "id": "T06",
+   "vc": "Blume Ventures",
+   "title": "How Procol took procurement from WhatsApp to AI agents (Blume commentary)",
+   "url": "https://blume.vc/commentaries/how-procol-took-procurement-from-whatsapp-to-ai-agents",
+   "published": "2026-10-07",
+   "expect": {
+    "signal": true,
+    "type": "S2",
+    "relevance": "adjacent",
+    "action_band": "Warm",
+    "why": "Wrote about procurement software 5 days ago"
+   }
+  },
+  {
+   "id": "T07",
+   "vc": "Speciale Invest",
+   "title": "Ultraviolette and the rise of India's sovereign industrial deep tech (supply chain, PLI)",
+   "url": "https://www.specialeinvest.com/post/ultraviolette-and-the-rise-of-india-s-sovereign-industrial-deep-tech",
+   "published": "2026-10-01",
+   "expect": {
+    "signal": true,
+    "type": "S2",
+    "relevance": "adjacent",
+    "action_band": "Low priority + Meet in person (with T08)",
+    "why": "Wrote about manufacturing supply chain"
+   }
+  },
+  {
+   "id": "T08",
+   "vc": "Speciale Invest",
+   "title": "TechSparks 2026 lineup: Vishesh Rajaram (Speciale Invest)",
+   "url": "https://yourstory.com/2026/10/techsparks-2026-from-ai-defence-edtech-saas-more-builders-join-the-new-tech-order",
+   "published": "2026-10-07",
+   "expect": {
+    "signal": true,
+    "type": "S4b",
+    "relevance": "general",
+    "action_band": "(adds Meet in person: TechSparks 2026, 13-15 Oct)",
+    "why": "Upcoming general event appearance"
+   }
+  },
+  {
+   "id": "T09",
+   "vc": "Lightspeed India",
+   "title": "Zetwerk sets IPO price band; Lightspeed largest OFS seller",
+   "url": "https://entrackr.com/news/zetwerk-sets-ipo-price-band-at-rs-143-151-eyes-rs-5012-cr-from-issue-12667441",
+   "published": "2026-10-12",
+   "expect": {
+    "signal": true,
+    "type": "S7",
+    "relevance": "adjacent",
+    "action_band": "Low priority",
+    "why": "Supply-chain portfolio company going public (timing signal)"
+   }
+  },
+  {
+   "id": "T10",
+   "vc": "WEH Ventures",
+   "title": "WEH Ventures marks first close of Rs 250 Cr Fund III (advanced manufacturing among sectors)",
+   "url": "https://yourstory.com/2026/09/weh-ventures-marks-first-close-of-rs-250-crore-fund-iii",
+   "published": "2026-09-29",
+   "expect": {
+    "signal": true,
+    "type": "S5",
+    "relevance": "adjacent",
+    "action_band": "Low priority",
+    "why": "New fund = actively deploying (timing signal)"
+   }
+  },
+  {
+   "id": "T11",
+   "vc": "Equentis Angel Fund; Inflection Point Ventures",
+   "title": "OORJAA raises Rs 9.7 Cr Series A led by Equentis Angel Fund",
+   "url": "https://startuptalky.com/news/oorjaa-raises-9-7-crore-series-a-led-by-equentis-angel-fund-2/",
+   "published": "2026-08-27",
+   "expect": {
+    "signal": false,
+    "type": "S1",
+    "relevance": "core",
+    "action_band": "No signal",
+    "why": "Perfect topic but 46 days old: 30-day rule"
+   }
+  },
+  {
+   "id": "T12",
+   "vc": null,
+   "title": "Blume Global lands $500M valuation with Bridgepoint deal",
+   "url": "https://www.freightwaves.com/news/blume-global-lands-500m-valuation-with-bridgepoint-deal",
+   "published": "2021-09-16",
+   "expect": {
+    "signal": false,
+    "type": null,
+    "relevance": null,
+    "action_band": null,
+    "why": "Name collision: Blume Global is not Blume Ventures"
+   }
+  },
+  {
+   "id": "T13",
+   "vc": null,
+   "title": "QuikApp raises seed funding from Vehra Ventures (logistics tech)",
+   "url": "https://m.thewire.in/article/ptiprnews/quikapp-raises-seed-funding-from-vehra-ventures-to-scale-indias-intelligent-logistics-layer/amp",
+   "published": "2026-10-05",
+   "expect": {
+    "signal": false,
+    "type": null,
+    "relevance": null,
+    "action_band": null,
+    "why": "Relevant and recent, but the investor is not tracked"
+   }
+  },
+  {
+   "id": "T14",
+   "vc": "Peak XV Partners",
+   "title": "Peak XV goes bigger at seed with new Surge cohort (Rajan Anandan interview)",
+   "url": "https://techcrunch.com/2026/09/28/peak-xv-goes-bigger-at-seed-with-new-surge-cohort-as-series-a-bar-rises/",
+   "published": "2026-09-28",
+   "expect": {
+    "signal": false,
+    "type": "S3",
+    "relevance": "general",
+    "action_band": null,
+    "why": "Partner spoke, but not about logistics/B2B; cohort announced, applications not open (not S6)"
+   }
+  },
+  {
+   "id": "T15",
+   "vc": "Fireside Ventures",
+   "title": "Beyond Appliances (kitchen appliance brand) raises Rs 110 Cr Series B led by Fireside",
+   "url": "https://startuptalky.com/news/daily-indian-funding-roundup-key-news-6-october-2026/",
+   "published": "2026-10-06",
+   "expect": {
+    "signal": false,
+    "type": "S1",
+    "relevance": "not_relevant",
+    "action_band": null,
+    "why": "Consumer appliance brand: deal by a tracked VC, but not about Vikram's space"
+   }
+  },
+  {
+   "id": "T16",
+   "vc": null,
+   "title": "Nexus Select Trust approved to acquire Galaxy Infra Creations",
+   "url": "https://niharkhandelwal.substack.com/p/deal-roundup-07-september-2026-13",
+   "published": "2026-09-13",
+   "expect": {
+    "signal": false,
+    "type": null,
+    "relevance": null,
+    "action_band": null,
+    "why": "Name collision: Nexus Select Trust is not Nexus Venture Partners"
+   }
+  },
+  {
+   "id": "T17",
+   "vc": "(manual)",
+   "title": "Manual log with a post date older than 30 days",
+   "url": "(entered during testing)",
+   "published": "(entered, >30 days)",
+   "expect": {
+    "signal": false,
+    "type": null,
+    "relevance": null,
+    "action_band": null,
+    "why": "30-day rule applies to manual signals too"
+   }
+  }
+ ],
+ "coverage": {
+  "true_signals": 10,
+  "rejections": 7,
+  "total": 17
+ }
+}

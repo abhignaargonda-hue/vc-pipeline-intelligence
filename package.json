@@ -1,0 +1,21 @@
+{
+  "name": "vc-pipeline-intelligence",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "run-once": "node --env-file=.env.local scripts/run-once.mjs",
+    "test-cases": "node --env-file=.env.local scripts/test-cases.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.0.1",
+    "next": "15.5.26",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  }
+}
