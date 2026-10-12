@@ -76,6 +76,7 @@ create table if not exists signals (
   rejected_reason text
 );
 alter table signals add column if not exists event_key text;
+alter table runs add column if not exists tavily_days int;
 create unique index if not exists signals_url_vc on signals (url, coalesce(vc_id, ''));
 create index if not exists signals_vc_pub on signals (vc_id, published_at);
 
