@@ -35,3 +35,15 @@ Note: the statement says "Supabase table"; we use Neon (also Postgres). Same tab
 
 ## Schedule
 Vercel cron Mon + Thu 6:30am IST = "0 1 * * 1,4" (UTC).
+
+## v3 features (12 Oct 2026, after Vikram's review)
+- Scoring v3 = fit x timing (seed/signal-rubric.md section 7). Deal stage/role, person and event city are Gemini labels; code scores.
+- One number everywhere: dashboard shows the stored follow_up_score; every run (and status change / log) stores a snapshot in run_scores;
+  "What changed" = latest snapshot vs previous.
+- Duplicates grouped by VC + type + subject, dated by the earliest report; Signals feed shows one row per event with all reports.
+- Vikram's status is editable on the dashboard but stored ONLY in the separate append-only vc_status table (app_set_status()).
+  vcs.status / contact_history / personal_notes are still never written (trigger + /api/verify hash).
+- Tavily lookback: 30 days until a run has covered the full 30-day window, then the gap since the last run (min 7). 1 basic search per VC.
+- Scheduled cron skips if a full run succeeded in the last 6 hours.
+- Scripts: test-rubric (v2 maths vs rubric section 6), trace (coverage trace of T01-T10), relabel (one-off v3 relabel of stored live signals).
+- Never insert test-set items into live tables.

@@ -10,6 +10,10 @@ export async function GET(req) {
   if (!process.env.CRON_SECRET || req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  // Skip a scheduled run if a full run already succeeded in the last 6 hours (nothing new to find, saves ~₹35).
+  const [recent] = await db()`select id from runs where trigger in ('cron','manual','verify') and status = 'ok'
+    and started_at > now() - interval '6 hours' order by id desc limit 1`;
+  if (recent) return NextResponse.json({ skipped: true, reason: `run #${recent.id} succeeded in the last 6 hours` });
   return NextResponse.json(await runPipeline('cron'));
 }
 

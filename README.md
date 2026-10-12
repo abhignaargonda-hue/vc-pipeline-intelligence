@@ -47,7 +47,8 @@ npm run migrate              # creates tables, function, trigger in Neon
 npm run seed                 # imports seed/vc-list.csv (50 VCs; Vikram's columns empty)
 npm run run-once             # one full pipeline run from the CLI
 npm run test-cases           # 17 test cases: expected vs actual (labels + bands)
-npm run import-research      # stores the 15 real researched articles from the test set (same Gemini labeller + filters)
+npm run test-rubric          # T01-T17 straight into the scorer, checks rubric section 6 (no network)
+npm run trace                # traces T01-T10 through every pipeline stage
 npm run dev
 ```
 
@@ -77,7 +78,7 @@ An interactive single page with a sidebar (Overview, Pipeline, Calendar, Signals
 - **Signals:** a feed of counted and rejected items (with the reason) and the Log-a-signal form. The form warns when a date is outside 30 days.
 - **Runs & cost:** each run's items, Tavily credits, Gemini tokens and cost in ₹.
 
-**Researched signals:** the 15 real articles in `seed/signal-test-set.json` were opened and dated by research on 12 Oct 2026. `npm run import-research` stores them through the same Gemini labeller and hard filters, with source `Research (12 Oct 2026)`. Gemini also gets the matching lines from `seed/vc-list-notes.md`, such as the TechSparks event date.
+**Scoring v3 (fit x timing)** and the other review fixes: see `CHANGES_v2.md` and `seed/signal-rubric.md` section 7.
 
 ## Routes
 | Route | |

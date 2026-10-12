@@ -122,3 +122,38 @@ end $$;
 
 drop trigger if exists vcs_guard_trg on vcs;
 create trigger vcs_guard_trg before update on vcs for each row execute function vcs_guard();
+
+-- ===== v3 (12 Oct 2026, Vikram's review) =====
+-- New labels: deal stage / role (fit x timing), which person the item is about, event city
+alter table signals add column if not exists deal_stage text;
+alter table signals add column if not exists deal_role text;
+alter table signals add column if not exists person text;
+alter table signals add column if not exists event_city text;
+alter table signals add column if not exists event_country text;
+
+-- Vikram's pipeline status set from the dashboard. A SEPARATE append-only table:
+-- vcs.status / contact_history / personal_notes are still never written by code (trigger above).
+create table if not exists vc_status (
+  id bigserial primary key,
+  vc_id text not null references vcs(vc_id),
+  status text not null check (status in ('Not contacted','Reached out - waiting','In conversation','Second meeting','Passed','Not now')),
+  note text,
+  created_at timestamptz not null default now()
+);
+create index if not exists vc_status_vc on vc_status (vc_id, created_at desc);
+
+create or replace function app_set_status(p_vc_id text, p_status text, p_note text) returns void language sql as $$
+  insert into vc_status (vc_id, status, note) values (p_vc_id, p_status, nullif(trim(p_note), ''));
+$$;
+
+-- Score snapshot after every run, so every screen shows the same number and
+-- "What changed" = latest snapshot vs the one before it.
+create table if not exists run_scores (
+  run_id bigint not null references runs(id),
+  vc_id text not null references vcs(vc_id),
+  score int not null,
+  band text not null,
+  action text,
+  summary text,
+  primary key (run_id, vc_id)
+);

@@ -5,9 +5,12 @@ const BANDS = {
   reach: { label: 'Reach out this week', short: 'Reach out', color: 'var(--reach)', soft: 'var(--reach-soft)' },
   warm: { label: 'Warm: mention the signal', short: 'Warm', color: 'var(--warm)', soft: 'var(--warm-soft)' },
   low: { label: 'Low priority', short: 'Low', color: 'var(--low)', soft: 'var(--low-soft)' },
-  quiet: { label: 'No recent signal', short: 'Quiet', color: 'var(--quiet)', soft: 'var(--quiet-soft)' },
+  unknown: { label: 'No news found (unknown)', short: 'Unknown', color: 'var(--unknown)', soft: 'var(--unknown-soft)' },
 };
-const ORDER = ['reach', 'warm', 'low', 'quiet'];
+const ORDER = ['reach', 'warm', 'low', 'unknown'];
+const parked = v => ['Passed', 'Not now'].includes(v.my_status);
+const GROUP_RANK = { logistics_active: 0, b2b_generalist: 1, poor_fit: 2 };
+const WHO_CLASS = { 'my partner': 'p-reach', 'someone else at the firm': 'p-warm' };
 const TYPE_NAMES = { S1: 'Invested', S2: 'Wrote', S3: 'Podcast / interview', S4a: 'Spoke (logistics event)', S4b: 'Spoke (startup event)', S5: 'New fund', S6: 'Applications open', S7: 'Portfolio follow-on / exit', N1: 'Category peer', N2: 'Partner change' };
 
 const d10 = d => String(d || '').slice(0, 10);
@@ -97,7 +100,7 @@ export default function Dashboard({ data, initialTab }) {
         </div>
       </div>
 
-      {selected && <Detail vc={selected} onClose={() => setSelected(null)} />}
+      {selected && <Detail vc={selected} statuses={data.statuses} onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -127,10 +130,11 @@ function RunNow() {
 /* ---------------- Overview ---------------- */
 function Overview({ data, counts, go, open }) {
   const total = data.vcs.length;
-  const reach = data.vcs.filter(v => v.band === 'reach');
-  const warm = data.vcs.filter(v => v.band === 'warm');
+  const active = data.vcs.filter(v => !parked(v));
+  const reach = active.filter(v => v.band === 'reach');
+  const warm = active.filter(v => v.band === 'warm');
   const meet = data.vcs.flatMap(v => v.meet.map(m => ({ ...m, firm: v.firm, vc_id: v.vc_id })));
-  const changes = data.lastRun?.changes || [];
+  const changes = data.changes || [];
   return (
     <>
       <div className="kpis">
@@ -145,7 +149,7 @@ function Overview({ data, counts, go, open }) {
       </div>
 
       <div className="card">
-        <div className="card-h"><h3>Band split</h3><span className="muted small">click a segment to filter the pipeline</span></div>
+        <div className="card-h"><h3>Band split</h3><span className="muted small">score = fit × timing · click a segment to filter</span></div>
         <div className="splitbar">
           {ORDER.filter(b => counts[b]).map(b => (
             <button key={b} style={{ flex: counts[b], background: BANDS[b].color }} title={`${BANDS[b].label}: ${counts[b]}`} onClick={() => go('pipeline', b)}>
@@ -158,30 +162,14 @@ function Overview({ data, counts, go, open }) {
 
       <div className="grid2">
         <div className="card">
-          <div className="card-h"><h3>Proximity rings</h3><span className="muted small">closer to centre = more worth contacting now</span></div>
-          <Rings vcs={data.vcs} open={open} />
-        </div>
-        <div className="stack">
-          <div className="card">
-            <div className="card-h"><h3><span className="pill p-reach">Ready to talk</span> Reach out this week</h3></div>
-            {reach.length === 0 ? <p className="muted">No VC crossed 50 this run.</p> : reach.map(v => <VcCard key={v.vc_id} v={v} open={open} />)}
-          </div>
-          <div className="card">
-            <div className="card-h"><h3><span className="pill p-warm">Warm</span> Mention the signal if you contact them</h3></div>
-            {warm.length === 0 ? <p className="muted">None.</p> : warm.map(v => <VcCard key={v.vc_id} v={v} open={open} compact />)}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid2">
-        <div className="card">
-          <div className="card-h"><h3>What changed since last run</h3><span className="muted small">{data.lastRun ? `run #${data.lastRun.id} · ${data.lastRun.trigger}` : ''}</span></div>
-          {changes.length === 0 ? <p className="muted">No score or action changed in the last run.</p> : (
+          <div className="card-h"><h3>What changed since last run</h3>
+            <span className="muted small">{data.changesRun ? `snapshot #${data.changesRun.id} (${data.changesRun.trigger}) vs the one before` : ''}</span></div>
+          {changes.length === 0 ? <p className="muted">No score or action changed.</p> : (
             <ul className="changes">{changes.map(c => {
-              const b = c.to_score >= 50 ? 'reach' : c.to_score >= 25 ? 'warm' : c.to_score >= 1 ? 'low' : 'quiet';
+              const b = c.to_score >= 50 ? 'reach' : c.to_score >= 25 ? 'warm' : c.to_score >= 1 ? 'low' : 'unknown';
               return (
                 <li key={c.vc_id} onClick={() => open(c.vc_id)}>
-                  <span className={`delta ${c.to_score >= c.from_score ? 'up' : 'down'}`}>{c.to_score >= c.from_score ? '▲' : '▼'}</span>
+                  <span className={`delta ${c.to_score >= c.from_score ? 'up' : 'down'}`}>{c.to_score > c.from_score ? '▲' : c.to_score < c.from_score ? '▼' : '•'}</span>
                   <b>{c.firm}</b>
                   <span className="mono">{c.from_score} → <span style={{ color: BANDS[b].color }}>{c.to_score}</span></span>
                   <span className="muted small ellipsis">{c.summary}</span>
@@ -195,14 +183,42 @@ function Overview({ data, counts, go, open }) {
           {meet.length === 0 ? <p className="muted">No upcoming events found.</p> : meet.map((m, i) => (
             <div key={i} className="meet" onClick={() => open(m.vc_id)}>
               <div className="meet-date"><b>{fmt(m.event_start, { day: 'numeric' })}</b><small>{fmt(m.event_start, { month: 'short' })}</small></div>
-              <div><b>{m.event_name || 'Event'}</b><div className="small">{m.firm} · {fmt(m.event_start)}{m.event_end && m.event_end !== m.event_start ? ` – ${fmt(m.event_end)}` : ''}</div>
+              <div><b>{m.event_name || 'Event'}</b>{m.event_city && <span className="small"> · {m.event_city}{m.event_country ? `, ${m.event_country}` : ''}</span>}
+                <div className="small">{m.firm} · {fmt(m.event_start)}{m.event_end && m.event_end !== m.event_start ? ` – ${fmt(m.event_end)}` : ''}</div>
                 <a className="small" href={m.url} target="_blank" onClick={e => e.stopPropagation()}>source ↗</a></div>
             </div>
           ))}
         </div>
       </div>
+
+      <div className="grid2">
+        <div className="stack">
+          <div className="card">
+            <div className="card-h"><h3><span className="pill p-reach">Ready to talk</span> Reach out this week</h3></div>
+            {reach.length > 0 ? reach.map(v => <VcCard key={v.vc_id} v={v} open={open} />) : (
+              <>
+                <p className="emptyline">No VC crossed 50 this run. These are the strongest warm leads.</p>
+                {warm.slice(0, 3).map(v => <VcCard key={v.vc_id} v={v} open={open} />)}
+              </>
+            )}
+          </div>
+          <div className="card">
+            <div className="card-h"><h3><span className="pill p-warm">Warm</span> Mention the signal if you contact them</h3><span className="muted small">{warm.length}</span></div>
+            {warm.length === 0 ? <p className="muted">None.</p> : warm.slice(reach.length ? 0 : 3).map(v => <VcCard key={v.vc_id} v={v} open={open} compact />)}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-h"><h3>Proximity rings</h3><span className="muted small">closer to centre = more worth contacting now</span></div>
+          <Rings vcs={data.vcs} open={open} />
+        </div>
+      </div>
     </>
   );
+}
+
+function WhoTag({ item }) {
+  if (!item) return null;
+  return <span className={`pill ${WHO_CLASS[item.who] || 'p-unknown'}`} title={item.person || ''}>{item.who === 'my partner' ? `your partner${item.person ? `: ${item.person}` : ''}` : item.who === 'someone else at the firm' ? `someone else: ${item.person}` : 'firm-level'}</span>;
 }
 
 function VcCard({ v, open, compact }) {
@@ -211,9 +227,12 @@ function VcCard({ v, open, compact }) {
     <div className={`vccard b-${v.band}`} onClick={() => open(v.vc_id)}>
       <ScoreRing score={v.score} band={v.band} size={compact ? 40 : 52} />
       <div className="vccard-body">
-        <div className="row"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'firm-level'}</span>{v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</div>
+        <div className="row"><b>{v.firm}</b><span className="muted small">{v.partner_name || 'no tracked partner'}</span>
+          {v.my_status && <span className="pill p-low">{v.my_status}</span>}
+          {v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</div>
         {best && <div className="small">{best.summary}</div>}
-        {best && !compact && <div className="small muted"><span className="tag">{best.type}</span>{host(best.url)} · {fmt(best.published_at)}</div>}
+        {best && <div className="small muted row" style={{ gap: 4 }}><span className="tag">{best.type}</span>{best.stage !== 'unknown' && <span className="tag t-rel">{best.stage}</span>}<WhoTag item={best} />{fmt(best.published_at)}{best.copies > 1 ? ` · ${best.copies} reports` : ''}</div>}
+        {!compact && <div className="small muted">Fit: {v.fit.why}</div>}
       </div>
     </div>
   );
@@ -234,15 +253,15 @@ function ScoreRing({ score, band, size = 48 }) {
 function Rings({ vcs, open }) {
   const [hover, setHover] = useState(null);
   const S = 420, C = S / 2;
-  const zones = { reach: [26, 70], warm: [82, 122], low: [134, 168], quiet: [180, 202] };
+  const zones = { reach: [26, 70], warm: [82, 122], low: [134, 168], unknown: [180, 202] };
   const dots = [];
   ORDER.forEach(b => {
     const list = vcs.filter(v => v.band === b);
     list.forEach((v, i) => {
       const [r0, r1] = zones[b];
-      const frac = b === 'quiet' ? 0.5 : b === 'reach' ? 1 - (v.score - 50) / 50 : b === 'warm' ? 1 - (v.score - 25) / 25 : 1 - (v.score - 1) / 24;
+      const frac = b === 'unknown' ? 0.5 : b === 'reach' ? 1 - (v.score - 50) / 50 : b === 'warm' ? 1 - (v.score - 25) / 25 : 1 - (v.score - 1) / 24;
       const r = r0 + (r1 - r0) * Math.max(0, Math.min(1, frac));
-      const a = (i / Math.max(1, list.length)) * 2 * Math.PI + (b === 'quiet' ? 0.2 : b === 'low' ? 0.9 : b === 'warm' ? 0.4 : -1.2);
+      const a = (i / Math.max(1, list.length)) * 2 * Math.PI + (b === 'unknown' ? 0.2 : b === 'low' ? 0.9 : b === 'warm' ? 0.4 : -1.2);
       dots.push({ v, x: C + r * Math.cos(a), y: C + r * Math.sin(a), b });
     });
   });
@@ -256,14 +275,14 @@ function Rings({ vcs, open }) {
         {dots.map(({ v, x, y, b }) => (
           <g key={v.vc_id} className="ringdot" onClick={() => open(v.vc_id)} onMouseEnter={() => setHover({ v, x, y })} onMouseLeave={() => setHover(null)}>
             <circle cx={x} cy={y} r="13" fill="transparent" />
-            <circle cx={x} cy={y} r={b === 'quiet' ? 4.5 : 7} fill={BANDS[b].color} stroke="#fff" strokeWidth="1.5" />
-            {b !== 'quiet' && b !== 'low' && <text x={x} y={y - 11} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--fg)">{v.firm.split(' ')[0]}</text>}
+            <circle cx={x} cy={y} r={b === 'unknown' ? 4.5 : 7} fill={BANDS[b].color} stroke={parked(v) ? 'var(--fg)' : '#fff'} strokeWidth="1.5" />
+            {b !== 'unknown' && b !== 'low' && <text x={x} y={y - 11} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--fg)">{v.firm.split(' ')[0]}</text>}
           </g>
         ))}
       </svg>
       {hover && (
         <div className="ringtip" style={{ left: `${(hover.x / S) * 100}%`, top: `${(hover.y / S) * 100}%` }}>
-          <b>{hover.v.firm}</b> · {hover.v.score}<br /><span className="small">{BANDS[hover.v.band].label}</span>
+          <b>{hover.v.firm}</b> · {hover.v.score}<br /><span className="small">{BANDS[hover.v.band].label}{hover.v.my_status ? ` · ${hover.v.my_status}` : ''}</span>
         </div>
       )}
     </div>
@@ -274,9 +293,11 @@ function Rings({ vcs, open }) {
 function Pipeline({ vcs, band, setBand, counts, open }) {
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('all');
+  const [conflict, setConflict] = useState(false);
   const list = vcs.filter(v =>
-    (band === 'all' || v.band === band) && (group === 'all' || v.vc_group === group) &&
-    (!q || `${v.firm} ${v.partner_name || ''} ${v.signal_summary || ''}`.toLowerCase().includes(q.toLowerCase())));
+    (band === 'all' || v.band === band) && (group === 'all' || v.vc_group === group) && (!conflict || v.flags.length) &&
+    (!q || `${v.firm} ${v.partner_name || ''} ${v.signal_summary || ''} ${v.my_status || ''}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => b.score - a.score || (GROUP_RANK[a.vc_group] ?? 3) - (GROUP_RANK[b.vc_group] ?? 3) || a.firm.localeCompare(b.firm));
   return (
     <div className="card">
       <div className="filters">
@@ -285,30 +306,34 @@ function Pipeline({ vcs, band, setBand, counts, open }) {
           {ORDER.map(b => (
             <button key={b} className={`chip c-${b} ${band === b ? 'on' : ''}`} onClick={() => setBand(b)}><i />{BANDS[b].short} <em>{counts[b]}</em></button>
           ))}
+          <button className={`chip ${conflict ? 'on' : ''}`} onClick={() => setConflict(!conflict)}>Flags <em>{vcs.filter(v => v.flags.length).length}</em></button>
         </div>
         <div className="row">
           <select value={group} onChange={e => setGroup(e.target.value)}>
             <option value="all">All groups</option><option value="logistics_active">logistics_active</option>
             <option value="b2b_generalist">b2b_generalist</option><option value="poor_fit">poor_fit</option>
           </select>
-          <label className="search"><Icon d={I.search} size={15} /><input placeholder="Search VC, partner, signal" value={q} onChange={e => setQ(e.target.value)} /></label>
+          <label className="search"><Icon d={I.search} size={15} /><input placeholder="Search VC, partner, signal, status" value={q} onChange={e => setQ(e.target.value)} /></label>
         </div>
       </div>
+      {band === 'unknown' && <p className="small muted">Unknown = our tracked sources (news search, Google Alerts, Inc42/YourStory, 4 Substacks) found nothing in 30 days. It is not proof the fund is inactive: LinkedIn and most firm blogs are not machine-readable. Use Log a signal for what you see yourself. Sorted by fit.</p>}
       <div className="wrap">
         <table className="tbl">
-          <thead><tr><th>VC</th><th>Score</th><th>Band</th><th className="hide-sm">Latest signal</th><th className="hide-sm">Last signal</th><th className="hide-sm">Status (Vikram)</th></tr></thead>
+          <thead><tr><th>VC</th><th>Score</th><th>Band</th><th className="hide-sm">Latest signal</th><th className="hide-sm">Your status</th></tr></thead>
           <tbody>
-            {list.map(v => (
-              <tr key={v.vc_id} onClick={() => open(v.vc_id)} className="clickrow">
-                <td><b>{v.firm}</b><div className="small muted">{v.partner_name || 'firm-level'} · {v.vc_group}</div></td>
-                <td><ScoreRing score={v.score} band={v.band} size={36} /></td>
-                <td><span className={`pill p-${v.band}`}>{BANDS[v.band].short}</span>{v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</td>
-                <td className="hide-sm small">{v.items[0] ? v.items[0].summary : <span className="muted">No recent signal in tracked sources</span>}</td>
-                <td className="hide-sm small">{v.last_signal_date ? fmt(v.last_signal_date) : '-'}</td>
-                <td className="hide-sm small">{v.status || <span className="muted">-</span>}</td>
-              </tr>
-            ))}
-            {list.length === 0 && <tr><td colSpan="6" className="muted">No VCs match.</td></tr>}
+            {list.map(v => {
+              const best = v.items.find(i => i.points > 0) || v.items[0];
+              return (
+                <tr key={v.vc_id} onClick={() => open(v.vc_id)} className={`clickrow ${parked(v) ? 'parkedrow' : ''}`}>
+                  <td><b>{v.firm}</b><div className="small muted">{v.partner_name || 'no tracked partner'} · {v.vc_group}</div></td>
+                  <td><ScoreRing score={v.score} band={v.band} size={36} /></td>
+                  <td><span className={`pill p-${v.band}`}>{BANDS[v.band].short}</span>{v.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}</td>
+                  <td className="hide-sm small">{best ? <>{best.summary} <span className="muted">· {fmt(best.published_at)}</span> <WhoTag item={best} /></> : <span className="muted">No news found in tracked sources</span>}</td>
+                  <td className="hide-sm small">{v.my_status ? <span className="pill p-low">{v.my_status}</span> : <span className="muted">set in panel →</span>}</td>
+                </tr>
+              );
+            })}
+            {list.length === 0 && <tr><td colSpan="5" className="muted">No VCs match.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -316,7 +341,33 @@ function Pipeline({ vcs, band, setBand, counts, open }) {
   );
 }
 
-function Detail({ vc, onClose }) {
+function StatusEditor({ v, statuses }) {
+  const [status, setStatus] = useState(v.my_status && statuses.includes(v.my_status) ? v.my_status : '');
+  const [note, setNote] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    if (!status) return;
+    setBusy(true); setMsg('');
+    const r = await fetch('/api/status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vc_id: v.vc_id, status, note }) });
+    const j = await r.json();
+    setBusy(false);
+    if (j.ok) { setMsg('Saved. Rescoring...'); setTimeout(() => location.reload(), 700); } else setMsg(j.message || 'Failed');
+  }
+  return (
+    <div className="statusbox">
+      <div className="row">
+        <select value={status} onChange={e => setStatus(e.target.value)}><option value="" disabled>Set your status</option>{statuses.map(s => <option key={s}>{s}</option>)}</select>
+        <input placeholder="Optional note (e.g. 'passed: too early')" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1 }} />
+        <button className="btn primary" disabled={busy || !status} onClick={save}>Save</button>
+      </div>
+      <div className="small muted">{msg || 'Passed / Not now removes the VC from your reach-out and warm lists. Saved to a separate status log; your original columns are never overwritten.'}</div>
+      {v.status_history.length > 0 && <details><summary>History ({v.status_history.length})</summary>{v.status_history.map((h, i) => <div key={i} className="small">{fmtDT(h.at)}: <b>{h.status}</b>{h.note ? ` · ${h.note}` : ''}</div>)}</details>}
+    </div>
+  );
+}
+
+function Detail({ vc, onClose, statuses }) {
   useEffect(() => {
     const k = e => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k);
@@ -325,7 +376,6 @@ function Detail({ vc, onClose }) {
   const counted = vc.items.filter(i => i.points > 0);
   const best = counted[0];
   const others = counted.slice(1).reduce((a, i) => a + i.points, 0);
-  const raw = best ? best.points + 0.3 * others + vc.bonus : 0;
   return (
     <div className="overlay" onClick={onClose}>
       <aside className="drawer" onClick={e => e.stopPropagation()}>
@@ -333,7 +383,8 @@ function Detail({ vc, onClose }) {
           <ScoreRing score={vc.score} band={vc.band} size={60} />
           <div style={{ flex: 1 }}>
             <h2>{vc.firm}</h2>
-            <div className="small muted">{vc.partner_name ? `${vc.partner_name}, ${vc.partner_title || ''}` : 'Firm-level (no verified partner)'} · {vc.vc_group}
+            <div className="small muted">{vc.partner_name ? `${vc.partner_name}, ${vc.partner_title || ''}` : 'No tracked partner (firm-level)'} · {vc.vc_group} · {vc.stage_fit}
+              {vc.partner_verified_on_firm_site && vc.partner_verified_on_firm_site !== 'yes' && <span className="pill p-warm">verify partner</span>}
               {vc.website && <> · <a href={`https://${vc.website}`} target="_blank">{vc.website}</a></>}</div>
             <span className={`pill p-${vc.band}`}>{BANDS[vc.band].label}</span>{vc.flags.map(f => <span key={f} className="pill p-flag">{f}</span>)}
           </div>
@@ -341,27 +392,38 @@ function Detail({ vc, onClose }) {
         </div>
 
         <section>
+          <h4>Your status</h4>
+          <StatusEditor v={vc} statuses={statuses} />
+        </section>
+
+        <section>
           <h4>Recommended action</h4>
           <p className="action">{vc.recommended_action || 'Not scored yet'}</p>
         </section>
 
         <section>
-          <h4>How the score was worked out</h4>
-          {vc.items.length === 0 ? <p className="muted small">No accepted signals in the last 30 days, so the score is 0.</p> : (
+          <h4>How the score was worked out (fit × timing)</h4>
+          {vc.items.length === 0 ? <p className="muted small">No news found in tracked sources in the last 30 days, so the score is 0 (unknown, not inactive).</p> : (
             <>
-              <table className="tbl small">
-                <thead><tr><th>Signal</th><th>Base</th><th>× Relevance</th><th>× Recency</th><th>= Points</th></tr></thead>
+              <div className="wrap"><table className="tbl small">
+                <thead><tr><th>Signal</th><th>Base</th><th>× Rel</th><th>× Recency</th><th>× Stage / role / person</th><th>= Pts</th></tr></thead>
                 <tbody>{vc.items.map((i, k) => (
                   <tr key={k} className={i.best ? 'bestrow' : ''}>
-                    <td><span className="tag">{i.type}</span>{TYPE_NAMES[i.type] || ''}{i.best && <span className="pill p-reach">best</span>}</td>
+                    <td><span className="tag">{i.type}</span>{TYPE_NAMES[i.type] || ''}{i.best && <span className="pill p-reach">best</span>}{i.copies > 1 && <span className="muted"> · {i.copies} reports, counted once</span>}
+                      {i.note && <div className="muted">{i.note}</div>}</td>
                     <td className="mono">{i.base}</td><td className="mono">{i.relMult} <span className="muted">({i.manual ? 'core, logged' : i.rel})</span></td>
-                    <td className="mono">{i.recMult} <span className="muted">({i.days} d)</span></td><td className="mono"><b>{i.points}</b></td>
+                    <td className="mono">{i.recMult} <span className="muted">({i.days} d)</span></td>
+                    <td className="mono">{i.stageMult} × {i.roleMult} × {i.personMult} <span className="muted">({i.stage}{i.deal_role && i.deal_role !== 'unknown' ? `, ${i.deal_role}` : ''})</span></td>
+                    <td className="mono"><b>{i.points}</b></td>
                   </tr>
                 ))}</tbody>
-              </table>
+              </table></div>
               <p className="formula mono small">
-                {best ? <>best {best.points.toFixed(1)} + 0.3 × {others.toFixed(1)} (others){vc.bonus ? ' + 10 (logistics deal on record)' : ''} = {raw.toFixed(1)} → <b>{vc.score}</b>{raw > 100 ? ' (capped)' : ''}</> : 'Only flag-type signals (0 points).'}
+                {best ? <>timing = best {best.points.toFixed(1)} + 0.3 × {others.toFixed(1)} = {vc.timing}<br />
+                  × fit {vc.fit.mult} ({vc.fit.why}){vc.bonus ? ' + 10 (logistics deal on record)' : ''} = {vc.raw}
+                  {vc.fit.cap != null ? ` → capped at ${vc.fit.cap}` : ''} → <b>{vc.score}</b></> : 'No scoring signal (only context or flag items).'}
               </p>
+              {vc.recomputed !== vc.score && <p className="small reason">Stored score {vc.score}; recomputing now gives {vc.recomputed}. It updates on the next run.</p>}
             </>
           )}
         </section>
@@ -369,24 +431,28 @@ function Detail({ vc, onClose }) {
         <section>
           <h4>Signals (last 30 days)</h4>
           {vc.items.length === 0 ? <p className="muted small">None in tracked sources.</p> : vc.items.map((i, k) => (
-            <a key={k} className="sig" href={i.url} target="_blank">
-              <div><span className="tag">{i.type}</span><span className="tag t-rel">{i.manual ? 'core (logged)' : i.relevance}</span><span className="muted small">{fmt(i.published_at)} · {i.manual ? 'logged by Vikram' : host(i.url)}</span></div>
-              <div>{i.summary} <Icon d={I.ext} size={12} /></div>
-            </a>
+            <div key={k} className="sig">
+              <div className="row" style={{ gap: 4 }}><span className="tag">{i.type}</span><span className="tag t-rel">{i.manual ? 'core (logged)' : i.relevance}</span><WhoTag item={i} /><span className="muted small">{fmt(i.published_at)}</span></div>
+              <a href={i.url} target="_blank">{i.summary} <Icon d={I.ext} size={12} /></a>
+              {i.copies > 1 && <details><summary>{i.copies} reports of this event</summary>{i.reports.map((r, j) => (
+                <div key={j} className="small"><a href={r.url} target="_blank">{host(r.url)}</a> · {fmt(r.published_at)} · {r.summary}</div>
+              ))}</details>}
+            </div>
           ))}
         </section>
 
-        {vc.logistics_evidence && <section><h4>Logistics deal on record</h4><p className="small">{vc.logistics_evidence}</p></section>}
+        {vc.thesis_quote && <section><h4>Thesis</h4><p className="small">"{vc.thesis_quote}" {vc.thesis_url && <a href={vc.thesis_url} target="_blank">source ↗</a>}</p></section>}
+        {vc.logistics_evidence && <section><h4>Logistics deal on record (warm-path lead)</h4><p className="small">{vc.logistics_evidence} {vc.logistics_source_url && <a href={vc.logistics_source_url} target="_blank">source ↗</a>}</p></section>}
 
         <section className="readonly">
-          <h4>Vikram's columns <span className="pill p-quiet">read-only</span></h4>
+          <h4>Your original columns <span className="pill p-unknown">read-only</span></h4>
           <dl>
-            <dt>Status</dt><dd>{vc.status || '-'}</dd>
+            <dt>Status (Neon)</dt><dd>{vc.status || '-'}</dd>
             <dt>Last contact</dt><dd>{vc.last_contact_date ? fmt(vc.last_contact_date, { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</dd>
             <dt>Contact history</dt><dd>{vc.contact_history || '-'}</dd>
             <dt>Notes</dt><dd>{vc.personal_notes || '-'}</dd>
           </dl>
-          <p className="muted small">Edited only by Vikram in Neon. Never written by code, never sent to Gemini or Tavily.</p>
+          <p className="muted small">Never written by code, never sent to Gemini or Tavily (proof: /api/verify).</p>
         </section>
       </aside>
     </div>
@@ -402,19 +468,19 @@ function Calendar({ data, open }) {
   const marks = useMemo(() => {
     const M = {};
     const add = (d, item) => { (M[d] = M[d] || []).push(item); };
-    data.runs.filter(r => r.trigger !== 'log').forEach(r => add(istDay(r.started_at), { kind: 'run', label: `Run #${r.id} (${r.trigger}): ${r.items_fetched} items, ₹${r.cost_inr.toFixed(2)}` }));
+    data.runs.filter(r => ['cron', 'manual', 'verify'].includes(r.trigger)).forEach(r => add(istDay(r.started_at), { kind: 'run', label: `Run #${r.id} (${r.trigger}): ${r.items_fetched} items, ₹${r.cost_inr.toFixed(2)}` }));
     // Scheduled cron runs (Mon + Thu 6:30am IST) from tomorrow to end of the visible range
     for (let d = addDays(data.today, 1); d <= addDays(data.today, 70); d = addDays(d, 1)) {
       const wd = new Date(d + 'T00:00:00Z').getUTCDay();
       if (wd === 1 || wd === 4) add(d, { kind: 'sched', label: 'Scheduled run, 6:30am IST' });
     }
     const evSeen = new Set();
-    data.feed.filter(s => s.accepted && s.event_start).forEach(s => {
+    data.events.filter(s => s.event_start).forEach(s => {
       const k = `${s.vc_id}|${s.event_name}|${s.event_start}`; if (evSeen.has(k)) return; evSeen.add(k);
       const end = s.event_end && s.event_end >= s.event_start ? s.event_end : s.event_start;
-      for (let d = s.event_start; d <= end; d = addDays(d, 1)) add(d, { kind: 'event', label: `${s.event_name || 'Event'} · ${s.firm}`, vc_id: s.vc_id, url: s.url });
+      for (let d = s.event_start; d <= end; d = addDays(d, 1)) add(d, { kind: 'event', label: `${s.event_name || 'Event'}${s.event_city ? ` (${s.event_city})` : ''} · ${s.firm}`, vc_id: s.vc_id, url: s.url });
     });
-    data.feed.filter(s => s.accepted && s.published_at).forEach(s => add(s.published_at, { kind: 'signal', label: `${s.firm}: ${s.summary}`, vc_id: s.vc_id, url: s.url, type: s.type }));
+    data.events.filter(s => s.published_at).forEach(s => add(s.published_at, { kind: 'signal', label: `${s.firm}: ${s.summary}`, vc_id: s.vc_id, url: s.url, type: s.type }));
     return M;
   }, [data]);
 
@@ -479,9 +545,9 @@ function Calendar({ data, open }) {
 
 /* ---------------- Signals ---------------- */
 function Signals({ data, open }) {
-  const [show, setShow] = useState('counted');
   const [type, setType] = useState('all');
-  const list = data.feed.filter(s => (show === 'all' || (show === 'counted' ? s.accepted : !s.accepted)) && (type === 'all' || s.type === type));
+  const list = data.events.filter(s => type === 'all' || s.type === type);
+  const reports = data.events.reduce((a, e) => a + e.reports.length, 0);
   return (
     <>
       <div className="card">
@@ -490,11 +556,7 @@ function Signals({ data, open }) {
       </div>
       <div className="card">
         <div className="filters">
-          <div className="chips">
-            {[['counted', 'Counted'], ['rejected', 'Rejected'], ['all', 'All']].map(([k, l]) => (
-              <button key={k} className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{l} <em>{data.feed.filter(s => k === 'all' || (k === 'counted' ? s.accepted : !s.accepted)).length}</em></button>
-            ))}
-          </div>
+          <div className="small muted">{data.events.length} events in the last 30 days, from {reports} reports. Duplicates across outlets are grouped and counted once.</div>
           <select value={type} onChange={e => setType(e.target.value)}>
             <option value="all">All types</option>
             {Object.entries(TYPE_NAMES).map(([k, v]) => <option key={k} value={k}>{k} {v}</option>)}
@@ -502,18 +564,32 @@ function Signals({ data, open }) {
         </div>
         <div className="feed">
           {list.map(s => (
-            <div key={s.id} className={`feeditem ${s.accepted ? '' : 'rejected'}`}>
+            <div key={s.key} className="feeditem">
               <div className="feed-meta">
                 <b className="link" onClick={() => open(s.vc_id)}>{s.firm}</b>
-                {s.type && <span className="tag">{s.type}</span>}{s.relevance && <span className="tag t-rel">{s.manual ? 'core (logged)' : s.relevance}</span>}
-                <span className="muted small">{fmt(s.published_at)} · {s.manual ? 'logged by Vikram' : s.source}</span>
+                <span className="tag">{s.type}</span><span className="tag t-rel">{s.manual ? 'core (logged)' : s.relevance}</span>
+                {s.deal_stage && <span className="tag t-rel">{s.deal_stage}</span>}
+                <WhoTag item={s} />
+                <span className="muted small">{fmt(s.published_at)} · {s.manual ? 'logged by Vikram' : host(s.url)}</span>
               </div>
-              <a href={s.url} target="_blank">{s.summary || s.title}</a>
-              {!s.accepted && <div className="small reason">Not counted: {s.rejected_reason}</div>}
+              <a href={s.url} target="_blank">{s.summary}</a>
+              {s.reports.length > 1 && <details><summary>{s.reports.length} reports of this event (numbers can differ by outlet)</summary>{s.reports.map((r, j) => (
+                <div key={j} className="small"><a href={r.url} target="_blank">{host(r.url)}</a> · {fmt(r.published_at)} · {r.summary}</div>
+              ))}</details>}
             </div>
           ))}
           {list.length === 0 && <p className="muted">No signals.</p>}
         </div>
+        <details className="rejected-list">
+          <summary>Rejected ({data.rejected.length}): what the pipeline threw out, and why</summary>
+          {data.rejected.map(s => (
+            <div key={s.id} className="feeditem rejected">
+              <div className="feed-meta"><b>{s.firm}</b>{s.type && <span className="tag">{s.type}</span>}<span className="muted small">{fmt(s.published_at)} · {s.source}</span></div>
+              <a href={s.url} target="_blank">{s.summary || s.title}</a>
+              <div className="small reason">Not counted: {s.rejected_reason}</div>
+            </div>
+          ))}
+        </details>
       </div>
     </>
   );
@@ -551,25 +627,29 @@ function LogSignal({ vcs, today }) {
 }
 
 /* ---------------- Runs ---------------- */
+const TRIGGER_NOTE = { cron: 'scheduled pipeline run', manual: 'Run now / CLI pipeline run', verify: 'pipeline run via /api/verify', log: 'Log a signal (1 item)',
+  status: 'your status change (rescore, no fetch)', relabel: 'one-off v3 relabel of stored signals', snapshot: 'score snapshot before v3' };
 function Runs({ runs }) {
+  const pipeline = runs.filter(r => ['cron', 'manual', 'verify'].includes(r.trigger));
   const tot = runs.reduce((a, r) => ({ inr: a.inr + r.cost_inr, cr: a.cr + r.tavily_credits, tk: a.tk + r.gemini_input_tokens + r.gemini_output_tokens }), { inr: 0, cr: 0, tk: 0 });
   const max = Math.max(1, ...runs.map(r => r.cost_inr));
   return (
     <>
       <div className="kpis">
-        <div className="kpi static"><small>Runs</small><b>{runs.length}</b></div>
+        <div className="kpi static"><small>Pipeline runs</small><b>{pipeline.length}</b><span className="muted small">{runs.length} entries incl. logs / status</span></div>
         <div className="kpi static"><small>Total cost</small><b>₹{tot.inr.toFixed(2)}</b></div>
         <div className="kpi static"><small>Tavily credits</small><b>{tot.cr}</b></div>
         <div className="kpi static"><small>Gemini tokens</small><b>{tot.tk.toLocaleString('en-IN')}</b></div>
       </div>
       <div className="card">
-        <p className="muted small">Cost = Tavily credits × $0.008 + Gemini Flash tokens at $0.50 / $3.00 per 1M (in / out), at ₹88/$. List prices; the free tiers make the actual bill ₹0 at this volume.</p>
+        <p className="muted small">Every entry is listed. Run ids skip #1, #3, #5 and #6: those were build-time test runs deleted on 12 Oct (a local test log, and the test-set import that broke the live-data rule). Scheduled runs are skipped if a full run succeeded in the last 6 hours.
+          Cost = Tavily credits × $0.008 + Gemini Flash tokens at $0.50 / $3.00 per 1M (in / out), at ₹88/$ (list prices; free tiers make the bill ₹0 at this volume).</p>
         <div className="wrap"><table className="tbl">
           <thead><tr><th>#</th><th>Trigger</th><th>Started (IST)</th><th>Status</th><th>Fetched</th><th>New</th><th>Counted</th><th>Tavily</th><th>Gemini in / out</th><th>Cost ₹</th><th>Changed</th><th>Errors</th></tr></thead>
           <tbody>{runs.map(r => (
             <tr key={r.id}>
-              <td>{r.id}</td><td><span className="tag">{r.trigger}</span></td><td className="small">{fmtDT(r.started_at)}</td>
-              <td><span className={`pill ${r.status === 'ok' ? 'p-reach' : r.status === 'error' ? 'p-flag' : 'p-quiet'}`}>{r.status}</span></td>
+              <td>{r.id}</td><td><span className="tag" title={TRIGGER_NOTE[r.trigger] || ''}>{r.trigger}</span><div className="small muted">{TRIGGER_NOTE[r.trigger]}</div></td><td className="small">{fmtDT(r.started_at)}</td>
+              <td><span className={`pill ${r.status === 'ok' ? 'p-reach' : r.status === 'error' ? 'p-flag' : 'p-unknown'}`}>{r.status}</span></td>
               <td>{r.items_fetched}</td><td>{r.items_new}</td><td>{r.signals_counted}</td><td>{r.tavily_credits}</td>
               <td className="small mono">{r.gemini_input_tokens.toLocaleString('en-IN')} / {r.gemini_output_tokens.toLocaleString('en-IN')}</td>
               <td><div className="costbar"><i style={{ width: `${(r.cost_inr / max) * 100}%` }} /><b>{r.cost_inr.toFixed(2)}</b></div></td>

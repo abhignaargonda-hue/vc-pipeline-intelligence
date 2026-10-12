@@ -66,3 +66,20 @@ Flags (N1, N2) are always shown next to the action.
 | Lightspeed India | T09 S7 adj 0 d = 10.5; +10 | 21 | Low |
 | WEH Ventures | T10 S5 adj 13 d = 9.5; +10 | 19 | Low |
 | Equentis, IPV, Peak XV, Fireside, others | T11-T17 rejected | 0 | No recent signal |
+
+## 7. v3: fit x timing (from Vikram's review of the live dashboard, 12 Oct 2026) [design choice]
+v2 ranked VCs by "did a deal recently". v3 ranks by "would they do MY deal, and is now the moment":
+- **Timing (per item)** = base x relevance x recency (as v2) x stage x role x person.
+  - S1 deal stage, as stated in the item: pre-seed/seed 1.2, pre-Series A/Series A 1.0, pre-Series B 0.6, Series B+ 0.4, debt 0, unknown 0.9.
+  - S1 role: led/co-led 1.0, participated 0.85, unknown 0.9.
+  - S5 new fund aimed at early stage (or stage unknown): base 40, relevance at least 0.8. A new fund is the clearest "deploying now" signal.
+  - S7 IPO / exit / secondary sale: 0 points (shown as context). A liquidity event says nothing about seed cheques. S7 follow-on keeps 15.
+  - S2/S3/S4 about someone else at the firm (not the tracked partner): x0.8. Each signal is tagged "your partner", "someone else at the firm" or "firm-level".
+- **Duplicates**: reports of the same event (same VC + type + subject) count once, dated by the EARLIEST report. All new-fund reports for a VC are one event.
+- **VC score** = (best + 0.3 x others) x fit + 10 (logistics_active, only with a live signal), capped at 100.
+  - Fit from vc-list.csv `stage_fit`: seed-focused 1.0, multi-stage (to Series B+/growth/IPO) 0.9, unclear/angel platform 0.85, "not seed" 0.6.
+  - `poor_fit` group (consumer-only, gaming, venture debt) is capped at 24 (Low).
+- **Status**: Vikram sets it on the dashboard; stored in the separate `vc_status` table (vcs.status is never written).
+  Passed / Not now: action becomes "do not re-pitch" / "parked" and the VC leaves the reach-out and warm lists.
+- **0 = "No news found (unknown)"**, not "quiet" or "inactive": the tracked sources found nothing.
+- v2 maths (sections 2-4) is still in code (`scoreVc(..., { version: 'v2' })`) and `npm run test-rubric` checks it against section 6.
