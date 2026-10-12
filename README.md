@@ -3,7 +3,7 @@
 Vikram is a first-time founder raising a Seed round for a B2B logistics SaaS in India. He tracks 50 VCs and can't tell who is worth contacting right now.
 Twice a week this system finds observable signals from the **last 30 days** for each VC. Gemini Flash labels each item, code scores it, and the result is written to his pipeline table in Neon Postgres. A public dashboard shows the ranking.
 
-- **Live dashboard:** see the Vercel URL in the repo description
+- **Live dashboard:** https://vc-pipeline-intelligence-cyan.vercel.app (runs: /runs, proof: /api/verify)
 - **Components map:** [`docs/vc-pipeline-components-map-v4.png`](docs/vc-pipeline-components-map-v4.png)
 - **Source of truth:** [`seed/`](seed). These files hold the company profile, the 50 real VCs, the source registry, the signal rubric v2 and the 17-case test set.
 
