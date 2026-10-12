@@ -10,7 +10,8 @@
     "migrate": "node --env-file=.env.local scripts/migrate.mjs",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "run-once": "node --env-file=.env.local scripts/run-once.mjs",
-    "test-cases": "node --env-file=.env.local scripts/test-cases.mjs"
+    "test-cases": "node --env-file=.env.local scripts/test-cases.mjs",
+    "import-research": "node --env-file=.env.local scripts/import-research.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.0.1",

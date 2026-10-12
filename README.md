@@ -47,6 +47,7 @@ npm run migrate              # creates tables, function, trigger in Neon
 npm run seed                 # imports seed/vc-list.csv (50 VCs; Vikram's columns empty)
 npm run run-once             # one full pipeline run from the CLI
 npm run test-cases           # 17 test cases: expected vs actual (labels + bands)
+npm run import-research      # stores the 15 real researched articles from the test set (same Gemini labeller + filters)
 npm run dev
 ```
 
@@ -57,6 +58,26 @@ Env vars needed on Vercel: `DATABASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `TA
 - Bands: **8/8** match rubric §6. IvyCap 64, 3one4 55, Info Edge 48, Avaana 42, Blume 35, Speciale 24 (+ Meet in person: TechSparks 2026), Lightspeed 21, WEH 19.
 - Gemini is non-deterministic even at temperature 0. In one rerun, one relevance label shifted (core vs adjacent), which moved one band. The script prints the full table so any drift is visible.
 - T17 (manual log > 30 days) uses a post date one day before the window start, because the test set has no real URL for it by design.
+
+## Dashboard
+An interactive single page with a sidebar (Overview, Pipeline, Calendar, Signals, Runs & cost). There is no UI library: plain CSS in a shadcn-style layout with a light-blue theme.
+- **Overview:**
+  - Clickable KPI tiles. Green = reach out (ready to talk), orange = warm, blue = low, gray = no recent signal.
+  - Band split bar.
+  - **Proximity rings**: each VC is a dot, and closer to "You" means more worth contacting now. Click a dot to open the VC.
+  - Reach-out and warm cards, what changed since the last run, and Meet in person (amber).
+- **Pipeline:** all 50 VCs with filter chips, a group filter and search. Clicking a row opens a detail panel with:
+  - the score worked out (base × relevance × recency per signal, best + 0.3 × others + 10)
+  - the signals with source links
+  - Vikram's columns, read-only
+- **Calendar:**
+  - Month view with completed runs and the scheduled Mon/Thu runs.
+  - Events (Meet in person) and the dates signals were published.
+  - The 30-day window is shaded. Click a day for its details.
+- **Signals:** a feed of counted and rejected items (with the reason) and the Log-a-signal form. The form warns when a date is outside 30 days.
+- **Runs & cost:** each run's items, Tavily credits, Gemini tokens and cost in ₹.
+
+**Researched signals:** the 15 real articles in `seed/signal-test-set.json` were opened and dated by research on 12 Oct 2026. `npm run import-research` stores them through the same Gemini labeller and hard filters, with source `Research (12 Oct 2026)`. Gemini also gets the matching lines from `seed/vc-list-notes.md`, such as the TechSparks event date.
 
 ## Routes
 | Route | |
